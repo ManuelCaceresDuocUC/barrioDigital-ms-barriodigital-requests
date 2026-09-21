@@ -1,0 +1,19 @@
+server:
+  port: 8082 # Usamos 8081 para no chocar con el BFF u otros MS
+
+spring:
+  application:
+    name: ms-requests
+  datasource:
+    url: jdbc:oracle:thin:@//localhost:1521/FREEPDB1
+    username: barriodigital
+    password: barriodigital
+    driver-class-name: oracle.jdbc.OracleDriver
+  jpa:
+    hibernate:
+      ddl-auto: update # Solo para desarrollo, crea las tablas automáticamente
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.OracleDialect
