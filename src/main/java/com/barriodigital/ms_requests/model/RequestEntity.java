@@ -1,10 +1,10 @@
 package com.barriodigital.ms_requests.model;
 
-
 import java.time.LocalDateTime;
 
 import org.hibernate.annotations.CreationTimestamp;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -22,8 +22,13 @@ public class RequestEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String type; // Ej: "Poda de árbol", "Reparación luminaria"
-    
+    /** Id del tipo de trámite en ms-barriodigital-catalog. */
+    @Column(name = "procedure_id")
+    private Long procedureId;
+
+    /** Nombre del tipo de trámite al momento de crear la solicitud (copia del catálogo). */
+    private String type;
+
     private String description;
 
     @Enumerated(EnumType.STRING)

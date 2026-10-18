@@ -6,6 +6,8 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,10 +16,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.barriodigital.ms_requests.dto.CreateRequestDto;
 import com.barriodigital.ms_requests.model.RequestEntity;
 import com.barriodigital.ms_requests.model.RequestStatus;
 import com.barriodigital.ms_requests.service.RequestService;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -30,8 +34,10 @@ public class RequestController {
     // Solo Clientes y Admins pueden crear solicitudes
     @PostMapping
     @PreAuthorize("hasAnyAuthority('Cliente', 'Admin')")
-    public ResponseEntity<RequestEntity> create(@RequestBody RequestEntity request) {
-        return new ResponseEntity<>(service.createRequest(request), HttpStatus.CREATED);
+    public ResponseEntity<RequestEntity> create(
+            @Valid @RequestBody CreateRequestDto request,
+            @AuthenticationPrincipal Jwt jwt) {
+        return new ResponseEntity<>(service.createRequest(request, jwt.getTokenValue()), HttpStatus.CREATED);
     }
 
     // Todos los usuarios autenticados pueden listar/ver solicitudes
@@ -51,10 +57,11 @@ public class RequestController {
     @PutMapping("/{id}/status")
     @PreAuthorize("hasAnyAuthority('Operador', 'Admin')")
     public ResponseEntity<RequestEntity> updateStatus(
-            @PathVariable Long id, 
-            @RequestBody Map<String, String> body) {
-        
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal Jwt jwt) {
+
         RequestStatus newStatus = RequestStatus.valueOf(body.get("status"));
-        return ResponseEntity.ok(service.updateStatus(id, newStatus));
+        return ResponseEntity.ok(service.updateStatus(id, newStatus, jwt.getTokenValue()));
     }
 }
