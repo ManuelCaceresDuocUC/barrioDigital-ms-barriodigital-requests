@@ -5,20 +5,28 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.barriodigital.ms_requests.dto.ApiError;
 
 /**
- * Mensajes legibles para errores de validación. Los {@code ResponseStatusException}
- * no se tocan: Spring Boot los responde con su mensaje (server.error.include-message).
+ * Traduce excepciones a respuestas JSON con un campo {@code message} legible, sin
+ * depender de la configuración de errores de Spring Boot.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ApiError> handleResponseStatus(ResponseStatusException ex) {
+        HttpStatusCode status = ex.getStatusCode();
+        return build(status, ex.getReason(), null);
+    }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiError> handleValidation(MethodArgumentNotValidException ex) {
@@ -33,8 +41,9 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "El cuerpo de la solicitud no es un JSON válido", null);
     }
 
-    private ResponseEntity<ApiError> build(HttpStatus status, String message, Map<String, String> fieldErrors) {
-        ApiError body = new ApiError(Instant.now(), status.value(), status.getReasonPhrase(), message, fieldErrors);
+    private ResponseEntity<ApiError> build(HttpStatusCode status, String message, Map<String, String> fieldErrors) {
+        String reason = status instanceof HttpStatus http ? http.getReasonPhrase() : status.toString();
+        ApiError body = new ApiError(Instant.now(), status.value(), reason, message, fieldErrors);
         return ResponseEntity.status(status).body(body);
     }
 }
