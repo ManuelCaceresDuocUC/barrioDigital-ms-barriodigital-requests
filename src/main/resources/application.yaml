@@ -1,13 +1,15 @@
 server:
   port: 8082 # Usamos 8081 para no chocar con el BFF u otros MS
+  error:
+    include-message: always # El frontend muestra el mensaje de los errores (409 sin cupo, 400, etc.)
 
 spring:
   application:
     name: ms-requests
   datasource:
-    url: jdbc:oracle:thin:@//localhost:1521/FREEPDB1
-    username: barriodigital
-    password: barriodigital
+    url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
+    username: system
+    password: tu_contraseña
     driver-class-name: oracle.jdbc.OracleDriver
   jpa:
     hibernate:
@@ -17,3 +19,15 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.OracleDialect
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Reemplaza <TU-TENANT-ID> con el ID de tu directorio en Azure
+          issuer-uri: https://login.microsoftonline.com/ffcb40ec-aa43-4c4e-acd8-4d27467872c5/v2.0
+
+# Cliente hacia ms-barriodigital-catalog. En Docker llega por la variable CATALOG_SERVICE_URL.
+catalog:
+  url: ${CATALOG_SERVICE_URL:http://localhost:8081}
+  connect-timeout: 3s
+  read-timeout: 10s

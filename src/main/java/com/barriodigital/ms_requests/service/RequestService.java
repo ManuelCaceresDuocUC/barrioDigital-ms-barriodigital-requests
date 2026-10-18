@@ -4,8 +4,12 @@ import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.barriodigital.ms_requests.client.CatalogClient;
+import com.barriodigital.ms_requests.client.CatalogProcedure;
+import com.barriodigital.ms_requests.dto.CreateRequestDto;
 import com.barriodigital.ms_requests.model.RequestEntity;
 import com.barriodigital.ms_requests.model.RequestStatus;
 import com.barriodigital.ms_requests.repository.RequestRepository;
@@ -17,8 +21,20 @@ import lombok.RequiredArgsConstructor;
 public class RequestService {
 
     private final RequestRepository repository;
+    private final CatalogClient catalog;
 
-    public RequestEntity createRequest(RequestEntity request) {
+    public RequestEntity createRequest(CreateRequestDto dto, String bearerToken) {
+        CatalogProcedure procedure = catalog.getProcedure(dto.procedureId(), bearerToken);
+        if (!procedure.active()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "El tipo de trámite '" + procedure.name() + "' no está disponible");
+        }
+
+        RequestEntity request = new RequestEntity();
+        request.setProcedureId(procedure.id());
+        request.setType(procedure.name());
+        request.setDescription(dto.description());
+        request.setUserId(dto.userId());
         request.setStatus(RequestStatus.INGRESADO); // Estado inicial por defecto
         return repository.save(request);
     }
@@ -32,15 +48,21 @@ public class RequestService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Trámite no encontrado"));
     }
 
-    public RequestEntity updateStatus(Long id, RequestStatus newStatus) {
-        RequestEntity request = getRequestById(id);
+    /**
+     * Cambia el estado. La fila queda bloqueada durante la transacción, así que dos
+     * peticiones simultáneas sobre la misma solicitud se ejecutan una tras otra.
+     */
+    @Transactional
+    public RequestEntity updateStatus(Long id, RequestStatus newStatus, String bearerToken) {
+        RequestEntity request = repository.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Trámite no encontrado"));
         RequestStatus currentStatus = request.getStatus();
 
         // 1. REGLA CLAVE DE EVALUACIÓN: Bloquear paso a EN_TERRENO si no fue ADMITIDO o puesto EN_GESTION
-        if (newStatus == RequestStatus.EN_TERRENO && 
+        if (newStatus == RequestStatus.EN_TERRENO &&
            (currentStatus != RequestStatus.ADMITIDO && currentStatus != RequestStatus.EN_GESTION)) {
             throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST, 
+                HttpStatus.BAD_REQUEST,
                 "Transición inválida: No se puede pasar a EN_TERRENO sin admisión o gestión previa."
             );
         }
@@ -48,11 +70,20 @@ public class RequestService {
         // 2. MÁQUINA DE ESTADOS: Validar transiciones permitidas
         validateStatusTransition(currentStatus, newStatus);
 
+        // 3. CUPO: solo la admisión real (INGRESADO -> ADMITIDO) descuenta un cupo diario.
+        //    Repetir el mismo estado no entra aquí, así que un reintento no gasta otro cupo.
+        if (currentStatus == RequestStatus.INGRESADO && newStatus == RequestStatus.ADMITIDO) {
+            if (request.getProcedureId() == null) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "La solicitud no tiene un tipo de trámite del catálogo, no se puede descontar cupo");
+            }
+            catalog.consumeQuota(request.getProcedureId(), bearerToken);
+        }
+
         request.setStatus(newStatus);
-        
-        // TODO: Si el nuevo estado es ADMITIDO, descontar cupo en ms-catalog
+
         // TODO: Emitir eventos a RabbitMQ (Notificaciones) y Kafka (Auditoría/Métricas)
-        
+
         return repository.save(request);
     }
 
@@ -69,7 +100,7 @@ public class RequestService {
 
         if (!isValid) {
             throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST, 
+                HttpStatus.BAD_REQUEST,
                 String.format("No se permite cambiar el estado de %s a %s", current, target)
             );
         }
