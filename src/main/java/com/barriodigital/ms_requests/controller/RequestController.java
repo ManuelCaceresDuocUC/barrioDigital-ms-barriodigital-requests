@@ -2,7 +2,7 @@ package com.barriodigital.ms_requests.controller;
 
 import java.util.List;
 import java.util.Map;
-
+import com.barriodigital.ms_requests.security.Requester;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.barriodigital.ms_requests.dto.CreateRequestDto;
 import com.barriodigital.ms_requests.model.RequestEntity;
 import com.barriodigital.ms_requests.model.RequestStatus;
+import com.barriodigital.ms_requests.security.Requester;
 import com.barriodigital.ms_requests.service.RequestService;
 
 import jakarta.validation.Valid;
@@ -37,7 +38,8 @@ public class RequestController {
     public ResponseEntity<RequestEntity> create(
             @Valid @RequestBody CreateRequestDto request,
             @AuthenticationPrincipal Jwt jwt) {
-        return new ResponseEntity<>(service.createRequest(request, jwt.getTokenValue()), HttpStatus.CREATED);
+            return new ResponseEntity<>(
+                service.createRequest(request, Requester.from(jwt), jwt.getTokenValue()), HttpStatus.CREATED);
     }
 
     // Todos los usuarios autenticados pueden listar/ver solicitudes
