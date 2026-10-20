@@ -18,5 +18,8 @@ public record CreateRequestDto(
         @Size(max = 255, message = "La descripción admite hasta {max} caracteres")
         String description,
 
-        String userId) {
+        String userId,
+        @Size(max = 12, message = "El RUT admite hasta {max} caracteres")
+        String citizenRut
+) {
 }

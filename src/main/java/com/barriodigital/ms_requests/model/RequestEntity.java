@@ -49,4 +49,9 @@ public class RequestEntity {
 
     @CreationTimestamp
     private LocalDateTime createdAt;
+
+    /** RUT del ciudadano (opcional). Solo para emitir certificados: no se expone por la API. */
+    @JsonIgnore
+    @Column(name = "citizen_rut")
+    private String citizenRut;
 }
