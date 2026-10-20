@@ -1,5 +1,6 @@
 package com.barriodigital.ms_requests.messaging;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -12,6 +13,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import java.io.IOException;
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.AmqpConnectException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
@@ -29,40 +31,54 @@ class RequestNotificationPublisherTest {
         return new RequestStatusChangedEvent(15L, "Certificado", "Calle Larga 123", status, email, "Ana", rut);
     }
 
+    private EventEnvelope<?> verifySent(String routingKey, String type) {
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(rabbitTemplate).convertAndSend(eq("cmd.direct"), eq(routingKey), captor.capture());
+        EventEnvelope<?> envelope = (EventEnvelope<?>) captor.getValue();
+        assertThat(envelope.type()).isEqualTo(type);
+        assertThat(envelope.correlationId()).isEqualTo("15");
+        assertThat(envelope.eventId()).isNotBlank();
+        assertThat(envelope.traceId()).isNotBlank();
+        assertThat(envelope.payload()).isNotNull();
+        return envelope;
+    }
+
     @Test
     void admitidoSoloEnviaCorreo() {
         publisher.onStatusChanged(event(RequestStatus.ADMITIDO, "ana@municipio.cl", "11111111-1"));
-        verify(rabbitTemplate).convertAndSend(eq("cmd.direct"), eq("email.send"), any(EmailNotificationEvent.class));
+        verifySent("email.send", EventTypes.EMAIL_NOTIFICATION);
         verifyNoMoreInteractions(rabbitTemplate);
     }
 
     @Test
-    void enTerrenoEnviaCorreoYTicketDeCuadrilla() {
+    void enTerrenoEnviaCorreoYTicketConElMismoTraceId() {
         publisher.onStatusChanged(event(RequestStatus.EN_TERRENO, "ana@municipio.cl", null));
-        verify(rabbitTemplate).convertAndSend(eq("cmd.direct"), eq("email.send"), any(EmailNotificationEvent.class));
-        verify(rabbitTemplate).convertAndSend(eq("cmd.direct"), eq("crew.ticket"), any(CrewTicketEvent.class));
+        EventEnvelope<?> email = verifySent("email.send", EventTypes.EMAIL_NOTIFICATION);
+        EventEnvelope<?> ticket = verifySent("crew.ticket", EventTypes.CREW_TICKET);
+        assertThat(ticket.traceId()).isEqualTo(email.traceId());
+        assertThat(ticket.eventId()).isNotEqualTo(email.eventId());
         verifyNoMoreInteractions(rabbitTemplate);
     }
 
     @Test
     void resueltoConRutEnviaCorreoYCertificado() {
         publisher.onStatusChanged(event(RequestStatus.RESUELTO, "ana@municipio.cl", "11111111-1"));
-        verify(rabbitTemplate).convertAndSend(eq("cmd.direct"), eq("email.send"), any(EmailNotificationEvent.class));
-        verify(rabbitTemplate).convertAndSend(eq("cmd.direct"), eq("certificate.gen"), any(CertificateEvent.class));
+        verifySent("email.send", EventTypes.EMAIL_NOTIFICATION);
+        verifySent("certificate.gen", EventTypes.CERTIFICATE_REQUEST);
         verifyNoMoreInteractions(rabbitTemplate);
     }
 
     @Test
     void resueltoSinRutNoEmiteCertificado() {
         publisher.onStatusChanged(event(RequestStatus.RESUELTO, "ana@municipio.cl", " "));
-        verify(rabbitTemplate).convertAndSend(eq("cmd.direct"), eq("email.send"), any(EmailNotificationEvent.class));
+        verifySent("email.send", EventTypes.EMAIL_NOTIFICATION);
         verifyNoMoreInteractions(rabbitTemplate);
     }
 
     @Test
     void sinCorreoNoEnviaEmailPeroSiElTicket() {
         publisher.onStatusChanged(event(RequestStatus.EN_TERRENO, null, null));
-        verify(rabbitTemplate).convertAndSend(eq("cmd.direct"), eq("crew.ticket"), any(CrewTicketEvent.class));
+        verifySent("crew.ticket", EventTypes.CREW_TICKET);
         verifyNoMoreInteractions(rabbitTemplate);
     }
 
