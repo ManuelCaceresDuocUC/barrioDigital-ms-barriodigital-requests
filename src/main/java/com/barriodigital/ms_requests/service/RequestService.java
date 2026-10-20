@@ -2,6 +2,7 @@ package com.barriodigital.ms_requests.service;
 
 import java.util.List;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,7 +14,9 @@ import com.barriodigital.ms_requests.dto.CreateRequestDto;
 import com.barriodigital.ms_requests.model.RequestEntity;
 import com.barriodigital.ms_requests.model.RequestStatus;
 import com.barriodigital.ms_requests.repository.RequestRepository;
+import org.springframework.context.ApplicationEventPublisher;
 
+import com.barriodigital.ms_requests.messaging.RequestStatusChangedEvent;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -22,6 +25,7 @@ public class RequestService {
 
     private final RequestRepository repository;
     private final CatalogClient catalog;
+    private final ApplicationEventPublisher events;
 
     public RequestEntity createRequest(CreateRequestDto dto, Requester requester, String bearerToken) {
         CatalogProcedure procedure = catalog.getProcedure(dto.procedureId(), bearerToken);
@@ -38,7 +42,10 @@ public class RequestService {
         request.setRequesterEmail(requester.email());
         request.setRequesterName(requester.name());
         request.setStatus(RequestStatus.INGRESADO);
-        return repository.save(request);
+        request.setCitizenRut(dto.citizenRut());
+        RequestEntity saved = repository.save(request);
+        events.publishEvent(RequestStatusChangedEvent.from(saved));
+        return saved;
     }
 
     public List<RequestEntity> getAllRequests() {
@@ -81,12 +88,16 @@ public class RequestService {
             }
             catalog.consumeQuota(request.getProcedureId(), bearerToken);
         }
-
         request.setStatus(newStatus);
+        RequestEntity saved = repository.save(request);
 
-        // TODO: Emitir eventos a RabbitMQ (Notificaciones) y Kafka (Auditoría/Métricas)
+        // Repetir el mismo estado no es un cambio: no se vuelve a notificar.
+        if (newStatus != currentStatus) {
+            events.publishEvent(RequestStatusChangedEvent.from(saved));
+        }
+        // TODO: Kafka (auditoría/métricas)
 
-        return repository.save(request);
+        return saved;
     }
 
     private void validateStatusTransition(RequestStatus current, RequestStatus target) {
