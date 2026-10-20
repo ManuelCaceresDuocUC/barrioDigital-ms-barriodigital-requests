@@ -4,6 +4,8 @@ import java.time.LocalDateTime;
 
 import org.hibernate.annotations.CreationTimestamp;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -35,6 +37,15 @@ public class RequestEntity {
     private RequestStatus status;
 
     private String userId; // El ID del usuario que lo creó (lo extraeremos del token luego)
+
+    /** Correo del solicitante (JWT). Solo para notificaciones: no se expone por la API. */
+    @JsonIgnore
+    @Column(name = "requester_email")
+    private String requesterEmail;
+
+    /** Nombre del solicitante (JWT). */
+    @Column(name = "requester_name")
+    private String requesterName;
 
     @CreationTimestamp
     private LocalDateTime createdAt;

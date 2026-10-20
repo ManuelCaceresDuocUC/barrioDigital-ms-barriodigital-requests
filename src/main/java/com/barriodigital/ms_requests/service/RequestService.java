@@ -6,7 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-
+import com.barriodigital.ms_requests.security.Requester;
 import com.barriodigital.ms_requests.client.CatalogClient;
 import com.barriodigital.ms_requests.client.CatalogProcedure;
 import com.barriodigital.ms_requests.dto.CreateRequestDto;
@@ -23,7 +23,7 @@ public class RequestService {
     private final RequestRepository repository;
     private final CatalogClient catalog;
 
-    public RequestEntity createRequest(CreateRequestDto dto, String bearerToken) {
+    public RequestEntity createRequest(CreateRequestDto dto, Requester requester, String bearerToken) {
         CatalogProcedure procedure = catalog.getProcedure(dto.procedureId(), bearerToken);
         if (!procedure.active()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -35,7 +35,9 @@ public class RequestService {
         request.setType(procedure.name());
         request.setDescription(dto.description());
         request.setUserId(dto.userId());
-        request.setStatus(RequestStatus.INGRESADO); // Estado inicial por defecto
+        request.setRequesterEmail(requester.email());
+        request.setRequesterName(requester.name());
+        request.setStatus(RequestStatus.INGRESADO);
         return repository.save(request);
     }
 
