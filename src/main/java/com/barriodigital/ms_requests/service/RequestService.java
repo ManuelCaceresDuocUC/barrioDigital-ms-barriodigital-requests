@@ -1,6 +1,7 @@
 package com.barriodigital.ms_requests.service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
@@ -94,6 +95,10 @@ public class RequestService {
     /**
      * Cambia el estado. La fila queda bloqueada durante la transacción, así que dos
      * peticiones simultáneas sobre la misma solicitud se ejecutan una tras otra.
+     *
+     * <p>Pedir el estado que ya tiene la solicitud es idempotente: responde con la solicitud tal
+     * cual, sin guardar, sin notificar y sin descontar cupo. Una transición fuera de la tabla de
+     * {@link RequestStatus#allowedTransitions()} responde 409 y no cambia nada.
      */
     @Transactional
     public RequestEntity updateStatus(Long id, RequestStatus newStatus, String bearerToken) {
@@ -101,20 +106,14 @@ public class RequestService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, NOT_FOUND_MESSAGE));
         RequestStatus currentStatus = request.getStatus();
 
-        // 1. REGLA CLAVE DE EVALUACIÓN: Bloquear paso a EN_TERRENO si no fue ADMITIDO o puesto EN_GESTION
-        if (newStatus == RequestStatus.EN_TERRENO &&
-           (currentStatus != RequestStatus.ADMITIDO && currentStatus != RequestStatus.EN_GESTION)) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                "Transición inválida: No se puede pasar a EN_TERRENO sin admisión o gestión previa."
-            );
+        if (newStatus == currentStatus) {
+            return request;
+        }
+        if (!currentStatus.canTransitionTo(newStatus)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, invalidTransitionMessage(currentStatus, newStatus));
         }
 
-        // 2. MÁQUINA DE ESTADOS: Validar transiciones permitidas
-        validateStatusTransition(currentStatus, newStatus);
-
-        // 3. CUPO: solo la admisión real (INGRESADO -> ADMITIDO) descuenta un cupo diario.
-        //    Repetir el mismo estado no entra aquí, así que un reintento no gasta otro cupo.
+        // CUPO: solo la admisión (INGRESADO -> ADMITIDO) descuenta un cupo diario.
         if (currentStatus == RequestStatus.INGRESADO && newStatus == RequestStatus.ADMITIDO) {
             if (request.getProcedureId() == null) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
@@ -122,34 +121,23 @@ public class RequestService {
             }
             catalog.consumeQuota(request.getProcedureId(), bearerToken);
         }
+
         request.setStatus(newStatus);
         RequestEntity saved = repository.save(request);
-
-        // Repetir el mismo estado no es un cambio: no se vuelve a notificar.
-        if (newStatus != currentStatus) {
-            events.publishEvent(RequestStatusChangedEvent.from(saved));
-        }
+        events.publishEvent(RequestStatusChangedEvent.from(saved));
         // TODO: Kafka (auditoría/métricas)
-
         return saved;
     }
 
-    private void validateStatusTransition(RequestStatus current, RequestStatus target) {
-        if (current == target) return; // Mismo estado
-
-        boolean isValid = switch (current) {
-            case INGRESADO -> target == RequestStatus.ADMITIDO || target == RequestStatus.RECHAZADO;
-            case ADMITIDO -> target == RequestStatus.EN_GESTION || target == RequestStatus.RECHAZADO;
-            case EN_GESTION -> target == RequestStatus.EN_TERRENO || target == RequestStatus.RECHAZADO;
-            case EN_TERRENO -> target == RequestStatus.RESUELTO || target == RequestStatus.RECHAZADO;
-            case RESUELTO, RECHAZADO -> false; // Estados finales, no se modifican
-        };
-
-        if (!isValid) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                String.format("No se permite cambiar el estado de %s a %s", current, target)
-            );
+    private static String invalidTransitionMessage(RequestStatus current, RequestStatus target) {
+        if (target == RequestStatus.EN_TERRENO && current == RequestStatus.INGRESADO) {
+            return "No se puede pasar a EN_TERRENO sin haber sido admitida (estado actual: INGRESADO)";
         }
+        String base = String.format("No se permite cambiar el estado de %s a %s", current, target);
+        if (current.isFinal()) {
+            return base + ": " + current + " es un estado final";
+        }
+        return base + ". Desde " + current + " se puede pasar a: "
+                + current.allowedTransitions().stream().map(Enum::name).collect(Collectors.joining(", "));
     }
 }

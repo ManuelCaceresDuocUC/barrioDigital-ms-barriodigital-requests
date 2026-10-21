@@ -1,7 +1,6 @@
 package com.barriodigital.ms_requests.controller;
 
 import java.util.List;
-import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,8 +16,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.barriodigital.ms_requests.dto.CreateRequestDto;
+import com.barriodigital.ms_requests.dto.UpdateStatusRequest;
 import com.barriodigital.ms_requests.model.RequestEntity;
-import com.barriodigital.ms_requests.model.RequestStatus;
 import com.barriodigital.ms_requests.security.Requester;
 import com.barriodigital.ms_requests.service.RequestService;
 
@@ -60,10 +59,8 @@ public class RequestController {
     @PreAuthorize("hasAnyAuthority('Operador', 'Admin')")
     public ResponseEntity<RequestEntity> updateStatus(
             @PathVariable Long id,
-            @RequestBody Map<String, String> body,
+            @Valid @RequestBody UpdateStatusRequest body,
             @AuthenticationPrincipal Jwt jwt) {
-
-        RequestStatus newStatus = RequestStatus.valueOf(body.get("status"));
-        return ResponseEntity.ok(service.updateStatus(id, newStatus, jwt.getTokenValue()));
+        return ResponseEntity.ok(service.updateStatus(id, body.status(), jwt.getTokenValue()));
     }
 }
