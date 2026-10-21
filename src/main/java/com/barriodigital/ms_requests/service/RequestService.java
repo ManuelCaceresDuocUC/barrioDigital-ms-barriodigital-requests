@@ -7,27 +7,31 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import com.barriodigital.ms_requests.security.Requester;
+
 import com.barriodigital.ms_requests.client.CatalogClient;
 import com.barriodigital.ms_requests.client.CatalogProcedure;
 import com.barriodigital.ms_requests.dto.CreateRequestDto;
+import com.barriodigital.ms_requests.messaging.RequestStatusChangedEvent;
 import com.barriodigital.ms_requests.model.RequestEntity;
 import com.barriodigital.ms_requests.model.RequestStatus;
 import com.barriodigital.ms_requests.repository.RequestRepository;
-import org.springframework.context.ApplicationEventPublisher;
+import com.barriodigital.ms_requests.security.Requester;
 
-import com.barriodigital.ms_requests.messaging.RequestStatusChangedEvent;
 import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
 public class RequestService {
 
+    private static final String NOT_FOUND_MESSAGE = "Trámite no encontrado";
+
     private final RequestRepository repository;
     private final CatalogClient catalog;
     private final ApplicationEventPublisher events;
 
     public RequestEntity createRequest(CreateRequestDto dto, Requester requester, String bearerToken) {
+        String ownerId = resolveOwner(dto, requester);
+
         CatalogProcedure procedure = catalog.getProcedure(dto.procedureId(), bearerToken);
         if (!procedure.active()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -38,7 +42,7 @@ public class RequestService {
         request.setProcedureId(procedure.id());
         request.setType(procedure.name());
         request.setDescription(dto.description());
-        request.setUserId(dto.userId());
+        request.setUserId(ownerId);
         request.setRequesterEmail(requester.email());
         request.setRequesterName(requester.name());
         request.setStatus(RequestStatus.INGRESADO);
@@ -48,13 +52,43 @@ public class RequestService {
         return saved;
     }
 
-    public List<RequestEntity> getAllRequests() {
-        return repository.findAll();
+    /** Admin, Operador y Auditor ven todas las solicitudes; el Cliente solo las suyas. */
+    public List<RequestEntity> getAllRequests(Requester requester) {
+        if (requester.canViewAll()) {
+            return repository.findAll();
+        }
+        return repository.findByUserId(requireUserId(requester));
     }
 
-    public RequestEntity getRequestById(Long id) {
-        return repository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Trámite no encontrado"));
+    /** Para un Cliente, la solicitud de otro vecino se trata como inexistente (404) y no se revela. */
+    public RequestEntity getRequestById(Long id, Requester requester) {
+        RequestEntity request = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, NOT_FOUND_MESSAGE));
+        boolean isOwner = requester.userId() != null && requester.userId().equals(request.getUserId());
+        if (!requester.canViewAll() && !isOwner) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, NOT_FOUND_MESSAGE);
+        }
+        return request;
+    }
+
+    /**
+     * El dueño sale del token. Solo Operador y Admin pueden indicar otro dueño en el cuerpo
+     * (ingreso a nombre del vecino); para un Cliente ese campo se ignora.
+     */
+    private String resolveOwner(CreateRequestDto dto, Requester requester) {
+        String onBehalf = dto.userId();
+        if (requester.canActOnBehalf() && onBehalf != null && !onBehalf.isBlank()) {
+            return onBehalf.trim();
+        }
+        return requireUserId(requester);
+    }
+
+    private String requireUserId(Requester requester) {
+        if (requester.userId() == null || requester.userId().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "El token no incluye el identificador del usuario (oid)");
+        }
+        return requester.userId();
     }
 
     /**
@@ -64,7 +98,7 @@ public class RequestService {
     @Transactional
     public RequestEntity updateStatus(Long id, RequestStatus newStatus, String bearerToken) {
         RequestEntity request = repository.findByIdForUpdate(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Trámite no encontrado"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, NOT_FOUND_MESSAGE));
         RequestStatus currentStatus = request.getStatus();
 
         // 1. REGLA CLAVE DE EVALUACIÓN: Bloquear paso a EN_TERRENO si no fue ADMITIDO o puesto EN_GESTION

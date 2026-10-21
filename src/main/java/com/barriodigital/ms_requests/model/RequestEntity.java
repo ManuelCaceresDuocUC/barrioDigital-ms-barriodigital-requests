@@ -5,7 +5,7 @@ import java.time.LocalDateTime;
 import org.hibernate.annotations.CreationTimestamp;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -36,7 +36,8 @@ public class RequestEntity {
     @Enumerated(EnumType.STRING)
     private RequestStatus status;
 
-    private String userId; // El ID del usuario que lo creó (lo extraeremos del token luego)
+    /** Dueño de la solicitud: el {@code oid} del JWT (o el del vecino, si la ingresó un Operador/Admin). */
+    private String userId;
 
     /** Correo del solicitante (JWT). Solo para notificaciones: no se expone por la API. */
     @JsonIgnore

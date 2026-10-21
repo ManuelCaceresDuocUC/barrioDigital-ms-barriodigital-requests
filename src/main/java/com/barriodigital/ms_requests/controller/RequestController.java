@@ -2,7 +2,7 @@ package com.barriodigital.ms_requests.controller;
 
 import java.util.List;
 import java.util.Map;
-import com.barriodigital.ms_requests.security.Requester;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -32,27 +32,27 @@ public class RequestController {
 
     private final RequestService service;
 
-    // Solo Clientes y Admins pueden crear solicitudes
+    // Cliente, Operador y Admin pueden crear solicitudes (el Operador, también a nombre de un vecino)
     @PostMapping
-    @PreAuthorize("hasAnyAuthority('Cliente', 'Admin')")
+    @PreAuthorize("hasAnyAuthority('Cliente', 'Operador', 'Admin')")
     public ResponseEntity<RequestEntity> create(
             @Valid @RequestBody CreateRequestDto request,
             @AuthenticationPrincipal Jwt jwt) {
-            return new ResponseEntity<>(
+        return new ResponseEntity<>(
                 service.createRequest(request, Requester.from(jwt), jwt.getTokenValue()), HttpStatus.CREATED);
     }
 
-    // Todos los usuarios autenticados pueden listar/ver solicitudes
+    // El Cliente ve solo las suyas; Admin, Operador y Auditor (solo lectura) ven todas
     @GetMapping
     @PreAuthorize("hasAnyAuthority('Cliente', 'Operador', 'Admin', 'Auditor')")
-    public ResponseEntity<List<RequestEntity>> getAll() {
-        return ResponseEntity.ok(service.getAllRequests());
+    public ResponseEntity<List<RequestEntity>> getAll(@AuthenticationPrincipal Jwt jwt) {
+        return ResponseEntity.ok(service.getAllRequests(Requester.from(jwt)));
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('Cliente', 'Operador', 'Admin', 'Auditor')")
-    public ResponseEntity<RequestEntity> getById(@PathVariable Long id) {
-        return ResponseEntity.ok(service.getRequestById(id));
+    public ResponseEntity<RequestEntity> getById(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        return ResponseEntity.ok(service.getRequestById(id, Requester.from(jwt)));
     }
 
     // Solo el Operador municipal y el Admin pueden cambiar estados

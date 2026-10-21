@@ -8,7 +8,9 @@ import jakarta.validation.constraints.Size;
  * Datos que el cliente envía para crear una solicitud. El nombre del tipo, el estado
  * y la fecha los define el servidor.
  *
- * @param userId se acepta del cuerpo como hasta ahora; pasará a tomarse del JWT en un issue aparte.
+ * @param userId solo lo respeta el servidor cuando quien crea es Operador o Admin (ingreso a nombre
+ *               de un vecino, con el {@code oid} del vecino); para un Cliente se ignora y el dueño
+ *               es siempre el {@code oid} de su JWT.
  */
 public record CreateRequestDto(
         @NotNull(message = "Debes elegir un tipo de trámite")
@@ -19,6 +21,7 @@ public record CreateRequestDto(
         String description,
 
         String userId,
+
         @Size(max = 12, message = "El RUT admite hasta {max} caracteres")
         String citizenRut
 ) {
