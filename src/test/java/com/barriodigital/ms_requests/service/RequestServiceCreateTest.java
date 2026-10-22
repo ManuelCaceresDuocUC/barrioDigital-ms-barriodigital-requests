@@ -52,7 +52,11 @@ class RequestServiceCreateTest {
     }
 
     private static CreateRequestDto dto(String userId) {
-        return new CreateRequestDto(7L, "Necesito mi certificado", userId, "11111111-1");
+        return dto(userId, null);
+    }
+
+    private static CreateRequestDto dto(String userId, String citizenEmail) {
+        return new CreateRequestDto(7L, "Necesito mi certificado", userId, "11111111-1", citizenEmail);
     }
 
     @Test
@@ -79,22 +83,66 @@ class RequestServiceCreateTest {
 
     @Test
     void elOperadorPuedeIngresarLaSolicitudANombreDeUnVecino() {
-        RequestEntity saved = service.createRequest(dto("oid-vecino"), operador(), "token");
+        RequestEntity saved = service.createRequest(dto("oid-vecino", "vecino@correo.cl"), operador(), "token");
 
         assertThat(saved.getUserId()).isEqualTo("oid-vecino");
     }
 
     @Test
     void elOperadorSinUserIdEnElCuerpoQuedaComoDueno() {
-        assertThat(service.createRequest(dto(null), operador(), "token").getUserId()).isEqualTo("oid-oscar");
-        assertThat(service.createRequest(dto("  "), operador(), "token").getUserId()).isEqualTo("oid-oscar");
+        assertThat(service.createRequest(dto(null, "vecino@correo.cl"), operador(), "token").getUserId())
+                .isEqualTo("oid-oscar");
+        assertThat(service.createRequest(dto("  ", "vecino@correo.cl"), operador(), "token").getUserId())
+                .isEqualTo("oid-oscar");
     }
 
     @Test
     void elAdminTambienPuedeIngresarANombreDeUnVecino() {
         Requester admin = new Requester("oid-admin", "admin@municipio.cl", "Admin", Set.of("Admin"));
 
-        assertThat(service.createRequest(dto("oid-vecino"), admin, "token").getUserId()).isEqualTo("oid-vecino");
+        assertThat(service.createRequest(dto("oid-vecino", "vecino@correo.cl"), admin, "token").getUserId())
+                .isEqualTo("oid-vecino");
+    }
+
+    @Test
+    void elClienteUsaSuPropioCorreoYSeIgnoraElCorreoDelCuerpo() {
+        RequestEntity saved = service.createRequest(dto(null, "otro@correo.cl"), cliente(), "token");
+
+        assertThat(saved.getRequesterEmail()).isEqualTo("ana@municipio.cl");
+        assertThat(saved.getRequesterName()).isEqualTo("Ana");
+    }
+
+    @Test
+    void elOperadorGuardaElCorreoDelVecinoNormalizadoYNoElSuyo() {
+        RequestEntity saved = service.createRequest(dto(null, "  Vecino@Correo.CL "), operador(), "token");
+
+        assertThat(saved.getRequesterEmail()).isEqualTo("vecino@correo.cl");
+        assertThat(saved.getRequesterName()).isNull();
+
+        ArgumentCaptor<RequestStatusChangedEvent> captor = ArgumentCaptor.forClass(RequestStatusChangedEvent.class);
+        verify(events).publishEvent(captor.capture());
+        assertThat(captor.getValue().requesterEmail()).isEqualTo("vecino@correo.cl");
+    }
+
+    @Test
+    void elAdminTambienDebeIndicarElCorreoDelVecino() {
+        Requester admin = new Requester("oid-admin", "admin@municipio.cl", "Admin", Set.of("Admin"));
+
+        assertThat(service.createRequest(dto(null, "vecino@correo.cl"), admin, "token").getRequesterEmail())
+                .isEqualTo("vecino@correo.cl");
+    }
+
+    @Test
+    void sinCorreoDelVecinoElOperadorRecibe400YNoSeGuardaNada() {
+        for (String vacio : new String[] { null, "", "   " }) {
+            assertThatThrownBy(() -> service.createRequest(dto(null, vacio), operador(), "token"))
+                    .isInstanceOfSatisfying(ResponseStatusException.class, ex -> {
+                        assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+                        assertThat(ex.getReason()).contains("correo del vecino");
+                    });
+        }
+        verify(repository, never()).save(any(RequestEntity.class));
+        verify(events, never()).publishEvent(any(RequestStatusChangedEvent.class));
     }
 
     @Test

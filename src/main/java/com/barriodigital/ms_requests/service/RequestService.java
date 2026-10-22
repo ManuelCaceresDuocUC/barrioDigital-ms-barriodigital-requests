@@ -1,6 +1,7 @@
 package com.barriodigital.ms_requests.service;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 import org.springframework.context.ApplicationEventPublisher;
@@ -32,6 +33,7 @@ public class RequestService {
 
     public RequestEntity createRequest(CreateRequestDto dto, Requester requester, String bearerToken) {
         String ownerId = resolveOwner(dto, requester);
+        Contact contact = resolveContact(dto, requester);
 
         CatalogProcedure procedure = catalog.getProcedure(dto.procedureId(), bearerToken);
         if (!procedure.active()) {
@@ -44,8 +46,8 @@ public class RequestService {
         request.setType(procedure.name());
         request.setDescription(dto.description());
         request.setUserId(ownerId);
-        request.setRequesterEmail(requester.email());
-        request.setRequesterName(requester.name());
+        request.setRequesterEmail(contact.email());
+        request.setRequesterName(contact.name());
         request.setStatus(RequestStatus.INGRESADO);
         request.setCitizenRut(dto.citizenRut());
         RequestEntity saved = repository.save(request);
@@ -82,6 +84,26 @@ public class RequestService {
             return onBehalf.trim();
         }
         return requireUserId(requester);
+    }
+
+    /**
+     * Correo y nombre del solicitante. Un Cliente usa los de su token. Cuando el Operador o el Admin
+     * ingresa la solicitud a nombre de un vecino, el correo es el que indicó (obligatorio) y el nombre
+     * se desconoce: nunca se guarda el dato del funcionario como si fuera el del vecino.
+     */
+    private Contact resolveContact(CreateRequestDto dto, Requester requester) {
+        if (!requester.canActOnBehalf()) {
+            return new Contact(requester.email(), requester.name());
+        }
+        String citizenEmail = dto.citizenEmail();
+        if (citizenEmail == null || citizenEmail.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Debes indicar el correo del vecino para ingresar la solicitud a su nombre");
+        }
+        return new Contact(citizenEmail.trim().toLowerCase(Locale.ROOT), null);
+    }
+
+    private record Contact(String email, String name) {
     }
 
     private String requireUserId(Requester requester) {

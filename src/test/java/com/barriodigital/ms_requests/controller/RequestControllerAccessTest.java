@@ -172,6 +172,19 @@ class RequestControllerAccessTest {
     }
 
     @Test
+    void laRespuestaIncluyeElCorreoDelSolicitanteParaMostrarlo() throws Exception {
+        RequestEntity solicitud = new RequestEntity();
+        solicitud.setId(5L);
+        solicitud.setUserId("oid-ana");
+        solicitud.setRequesterEmail("ana@municipio.cl");
+        when(service.getRequestById(eq(5L), any())).thenReturn(solicitud);
+
+        mockMvc.perform(get("/api/requests/5").with(token("oid-o", "Operador")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requesterEmail").value("ana@municipio.cl"));
+    }
+
+    @Test
     void unaSolicitudPropiaSeEntrega() throws Exception {
         RequestEntity propia = new RequestEntity();
         propia.setId(1L);
