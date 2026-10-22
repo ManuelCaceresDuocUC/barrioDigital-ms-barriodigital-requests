@@ -39,12 +39,14 @@ public class RequestEntity {
     /** Dueño de la solicitud: el {@code oid} del JWT (o el del vecino, si la ingresó un Operador/Admin). */
     private String userId;
 
-    /** Correo del solicitante (JWT). Solo para notificaciones: no se expone por la API. */
-    @JsonIgnore
+    /**
+     * Correo del solicitante: el del JWT si lo creó el propio vecino, o el que indicó el Operador/Admin
+     * si ingresó la solicitud a nombre de un vecino. Se usa para notificar y para mostrar al personal.
+     */
     @Column(name = "requester_email")
     private String requesterEmail;
 
-    /** Nombre del solicitante (JWT). */
+    /** Nombre del solicitante (JWT). Vacío si la solicitud la ingresó el personal a nombre de un vecino. */
     @Column(name = "requester_name")
     private String requesterName;
 
