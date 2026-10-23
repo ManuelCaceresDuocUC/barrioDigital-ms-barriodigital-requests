@@ -8,8 +8,8 @@ spring:
     name: ms-requests
   datasource:
     url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
-    username: system
-    password: tu_contraseña
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
     driver-class-name: oracle.jdbc.OracleDriver
   jpa:
     hibernate:

@@ -31,3 +31,23 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Logs ###
+*.log
+logs/
+hs_err_pid*
+
+### Secretos y variables de entorno locales ###
+.env
+.env.*
+!.env.example
+
+### Herramientas locales (no forman parte del proyecto) ###
+modernize/
+.claude/
+
+### Archivos de sistema operativo y respaldos ###
+.DS_Store
+Thumbs.db
+*.bak
+*.swp
