@@ -10,54 +10,46 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
-import java.io.IOException;
-
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.amqp.AmqpConnectException;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 import com.barriodigital.ms_requests.model.RequestStatus;
 
 class RequestNotificationPublisherTest {
 
-    private final RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
-    private final MessagingProperties messaging = new MessagingProperties("cmd.direct",
+    private final MessageGateway gateway = mock(MessageGateway.class);
+    private final MessagingProperties messaging = new MessagingProperties(
             new MessagingProperties.RoutingKeys("email.send", "crew.ticket", "certificate.gen"));
-    private final RequestNotificationPublisher publisher =
-            new RequestNotificationPublisher(rabbitTemplate, messaging);
+    private final RequestNotificationPublisher publisher = new RequestNotificationPublisher(gateway, messaging);
 
     private RequestStatusChangedEvent event(RequestStatus status, String email, String rut) {
         return new RequestStatusChangedEvent(15L, "Certificado", "Calle Larga 123", status, email, "Ana", rut);
     }
 
-    private EventEnvelope<?> verifySent(String routingKey, String type) {
-        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
-        verify(rabbitTemplate).convertAndSend(eq("cmd.direct"), eq(routingKey), captor.capture());
-        EventEnvelope<?> envelope = (EventEnvelope<?>) captor.getValue();
-        assertThat(envelope.type()).isEqualTo(type);
-        assertThat(envelope.correlationId()).isEqualTo("15");
-        assertThat(envelope.eventId()).isNotBlank();
-        assertThat(envelope.traceId()).isNotBlank();
-        assertThat(envelope.payload()).isNotNull();
-        return envelope;
+    /** Verifica un envío y devuelve el traceId usado. */
+    private String verifySent(String routingKey, String type) {
+        ArgumentCaptor<String> traceId = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
+        verify(gateway).publish(eq(routingKey), eq(type), eq("15"), traceId.capture(), payload.capture());
+        assertThat(traceId.getValue()).isNotBlank();
+        assertThat(payload.getValue()).isNotNull();
+        return traceId.getValue();
     }
 
     @Test
     void admitidoSoloEnviaCorreo() {
         publisher.onStatusChanged(event(RequestStatus.ADMITIDO, "ana@municipio.cl", "11111111-1"));
         verifySent("email.send", EventTypes.EMAIL_NOTIFICATION);
-        verifyNoMoreInteractions(rabbitTemplate);
+        verifyNoMoreInteractions(gateway);
     }
 
     @Test
     void enTerrenoEnviaCorreoYTicketConElMismoTraceId() {
         publisher.onStatusChanged(event(RequestStatus.EN_TERRENO, "ana@municipio.cl", null));
-        EventEnvelope<?> email = verifySent("email.send", EventTypes.EMAIL_NOTIFICATION);
-        EventEnvelope<?> ticket = verifySent("crew.ticket", EventTypes.CREW_TICKET);
-        assertThat(ticket.traceId()).isEqualTo(email.traceId());
-        assertThat(ticket.eventId()).isNotEqualTo(email.eventId());
-        verifyNoMoreInteractions(rabbitTemplate);
+        String emailTrace = verifySent("email.send", EventTypes.EMAIL_NOTIFICATION);
+        String ticketTrace = verifySent("crew.ticket", EventTypes.CREW_TICKET);
+        assertThat(ticketTrace).isEqualTo(emailTrace);
+        verifyNoMoreInteractions(gateway);
     }
 
     @Test
@@ -65,27 +57,39 @@ class RequestNotificationPublisherTest {
         publisher.onStatusChanged(event(RequestStatus.RESUELTO, "ana@municipio.cl", "11111111-1"));
         verifySent("email.send", EventTypes.EMAIL_NOTIFICATION);
         verifySent("certificate.gen", EventTypes.CERTIFICATE_REQUEST);
-        verifyNoMoreInteractions(rabbitTemplate);
+        verifyNoMoreInteractions(gateway);
     }
 
     @Test
     void resueltoSinRutNoEmiteCertificado() {
         publisher.onStatusChanged(event(RequestStatus.RESUELTO, "ana@municipio.cl", " "));
         verifySent("email.send", EventTypes.EMAIL_NOTIFICATION);
-        verifyNoMoreInteractions(rabbitTemplate);
+        verifyNoMoreInteractions(gateway);
     }
 
     @Test
     void sinCorreoNoEnviaEmailPeroSiElTicket() {
         publisher.onStatusChanged(event(RequestStatus.EN_TERRENO, null, null));
         verifySent("crew.ticket", EventTypes.CREW_TICKET);
-        verifyNoMoreInteractions(rabbitTemplate);
+        verifyNoMoreInteractions(gateway);
     }
 
     @Test
-    void unaFallaDelBrokerNoPropagaLaExcepcion() {
-        doThrow(new AmqpConnectException(new IOException("broker caído")))
-                .when(rabbitTemplate).convertAndSend(anyString(), anyString(), any(Object.class));
+    void elContenidoDelCorreoLlevaElEstadoDelTramite() {
+        publisher.onStatusChanged(event(RequestStatus.EN_GESTION, "ana@municipio.cl", null));
+
+        ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
+        verify(gateway).publish(eq("email.send"), eq(EventTypes.EMAIL_NOTIFICATION), eq("15"), anyString(),
+                payload.capture());
+        EmailNotificationEvent email = (EmailNotificationEvent) payload.getValue();
+        assertThat(email.to()).isEqualTo("ana@municipio.cl");
+        assertThat(email.body()).contains("EN GESTION");
+    }
+
+    @Test
+    void unaFallaDelServicioDeMensajeriaNoPropagaLaExcepcion() {
+        doThrow(new MessagePublishException("rabbitadmin no responde", new RuntimeException()))
+                .when(gateway).publish(anyString(), anyString(), anyString(), anyString(), any());
 
         assertThatCode(() -> publisher.onStatusChanged(
                 event(RequestStatus.ADMITIDO, "ana@municipio.cl", null))).doesNotThrowAnyException();
