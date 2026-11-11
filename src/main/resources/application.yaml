@@ -19,13 +19,6 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.OracleDialect
-  rabbitmq:
-    host: ${RABBITMQ_HOST:localhost}
-    port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USER:guest}
-    password: ${RABBITMQ_PASSWORD:guest}
-    publisher-confirm-type: correlated
-    publisher-returns: true
 
   security:
     oauth2:
@@ -40,11 +33,15 @@ catalog:
     connect-timeout: 3s
     read-timeout: 10s
 
-  # Nombres de mensajería (deben coincidir con mq/definitions.json de la infraestructura)
+  # Routing keys de los eventos que se publican. requests no se conecta a RabbitMQ: pide la publicación a
+  # ms-barriodigital-rabbitadmin, que define el exchange y valida estas claves.
 barriodigital:
     messaging:
-      exchange: cmd.direct
       routing-keys:
         email: email.send
         crew: crew.ticket
         certificate: certificate.gen
+    rabbitadmin:
+      url: ${RABBITADMIN_SERVICE_URL:http://localhost:8086}
+      connect-timeout: 2s
+      read-timeout: 5s
