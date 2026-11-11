@@ -1,0 +1,44 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Ejecutar tests
+        # Se excluyen los *ApplicationTests (levantan el contexto completo y necesitan Oracle/RabbitMQ reales).
+        run: |
+          chmod +x mvnw
+          ./mvnw -B -ntp test -Dtest='!*ApplicationTests' -Dsurefire.failIfNoSpecifiedTests=false
+
+  deploy:
+    name: Desplegar en ec2-apps
+    # Solo al fusionar en main (no en pull requests) y si los tests pasaron.
+    if: github.event_name == 'push'
+    needs: test
+    uses: ManuelCaceresDuocUC/barriodigital-infra/.github/workflows/deploy-service.yml@main
+    with:
+      directorio: ms-barriodigital-requests
+      servicio: ms-barriodigital-requests
+    secrets:
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_USER: ${{ secrets.EC2_USER }}
+      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
