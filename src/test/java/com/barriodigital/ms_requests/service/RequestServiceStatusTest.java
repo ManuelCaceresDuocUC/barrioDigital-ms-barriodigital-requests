@@ -129,11 +129,11 @@ class RequestServiceStatusTest {
     @Test
     void noSePuedeRetrocederNiReabrirUnaSolicitud() {
         assertConflict(RequestStatus.ADMITIDO, RequestStatus.INGRESADO);
-        assertConflict(RequestStatus.EN_TERRENO, RequestStatus.EN_GESTION);
+        assertConflict(RequestStatus.EN_TERRENO, RequestStatus.ADMITIDO);
     }
 
     @Test
-    void desdeTerrenoSoloSePuedeResolver() {
+    void desdeTerrenoNoSePuedeRechazar() {
         assertConflict(RequestStatus.EN_TERRENO, RequestStatus.RECHAZADO);
     }
 
