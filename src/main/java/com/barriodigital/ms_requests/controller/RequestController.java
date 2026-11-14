@@ -63,7 +63,8 @@ public class RequestController {
         return ResponseEntity.ok(service.getHistory(id, Requester.from(jwt)));
     }
 
-    // Solo el Operador municipal y el Admin pueden cambiar estados. Al rechazar, el motivo es obligatorio.
+    // Solo el Operador municipal y el Admin pueden cambiar estados. Al rechazar o cancelar en terreno el
+    // motivo es obligatorio; al pasar a EN_TERRENO se exigen los datos de la cuadrilla.
     @PutMapping("/{id}/status")
     @PreAuthorize("hasAnyAuthority('Operador', 'Admin')")
     public ResponseEntity<RequestEntity> updateStatus(
@@ -71,6 +72,6 @@ public class RequestController {
             @Valid @RequestBody UpdateStatusRequest body,
             @AuthenticationPrincipal Jwt jwt) {
         return ResponseEntity.ok(service.updateStatus(
-                id, body.status(), body.reason(), Requester.from(jwt), jwt.getTokenValue()));
+                id, body.status(), body.reason(), body.crew(), Requester.from(jwt), jwt.getTokenValue()));
     }
 }

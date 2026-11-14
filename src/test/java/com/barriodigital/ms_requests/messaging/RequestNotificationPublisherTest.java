@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import org.junit.jupiter.api.Test;
@@ -93,5 +94,25 @@ class RequestNotificationPublisherTest {
 
         assertThatCode(() -> publisher.onStatusChanged(
                 event(RequestStatus.ADMITIDO, "ana@municipio.cl", null))).doesNotThrowAnyException();
+    }
+
+    @Test
+    void laCancelacionEnTerrenoNoEnviaCorreoNiTicket() {
+        RequestStatusChangedEvent cancel = new RequestStatusChangedEvent(15L, "Certificado", "Calle Larga 123",
+                RequestStatus.EN_GESTION, "ana@municipio.cl", "Ana", null, "Camino cortado", RequestStatus.EN_TERRENO);
+
+        publisher.onStatusChanged(cancel);
+
+        verifyNoInteractions(gateway);
+    }
+
+    @Test
+    void elRetrocesoNormalDeAdmitidoAGestionSiEnviaCorreo() {
+        RequestStatusChangedEvent normal = new RequestStatusChangedEvent(15L, "Certificado", "Calle Larga 123",
+                RequestStatus.EN_GESTION, "ana@municipio.cl", "Ana", null, null, RequestStatus.ADMITIDO);
+
+        publisher.onStatusChanged(normal);
+
+        verifySent("email.send", EventTypes.EMAIL_NOTIFICATION);
     }
 }

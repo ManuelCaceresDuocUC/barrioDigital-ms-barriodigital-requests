@@ -13,6 +13,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.barriodigital.ms_requests.client.CatalogClient;
 import com.barriodigital.ms_requests.client.CatalogProcedure;
 import com.barriodigital.ms_requests.dto.CreateRequestDto;
+import com.barriodigital.ms_requests.dto.CrewAssignmentDto;
 import com.barriodigital.ms_requests.dto.StatusChangeResponse;
 import com.barriodigital.ms_requests.messaging.RequestStatusChangedEvent;
 import com.barriodigital.ms_requests.model.RequestEntity;
@@ -144,12 +145,14 @@ public class RequestService {
      * cual, sin guardar, sin notificar y sin descontar cupo. Una transición fuera de la tabla de
      * {@link RequestStatus#allowedTransitions()} responde 409 y no cambia nada.
      *
-     * <p>Rechazar exige un motivo (400 si falta); en los demás estados el motivo se ignora. Cada cambio
-     * queda en el historial junto con quién lo hizo, dentro de la misma transacción.
+     * <p>Rechazar y cancelar en terreno (EN_TERRENO a EN_GESTION) exigen un motivo (400 si falta); pasar a
+     * EN_TERRENO exige los datos de la cuadrilla (nombre, integrantes y patente). En los demás cambios
+     * ambos se ignoran. Cada cambio queda en el historial junto con quién lo hizo, dentro de la misma
+     * transacción.
      */
     @Transactional
-    public RequestEntity updateStatus(Long id, RequestStatus newStatus, String reason, Requester actor,
-            String bearerToken) {
+    public RequestEntity updateStatus(Long id, RequestStatus newStatus, String reason, CrewAssignmentDto crew,
+            Requester actor, String bearerToken) {
         RequestEntity request = repository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, NOT_FOUND_MESSAGE));
         RequestStatus currentStatus = request.getStatus();
@@ -161,7 +164,8 @@ public class RequestService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, invalidTransitionMessage(currentStatus, newStatus));
         }
 
-        String cleanReason = requireReasonIfRejected(newStatus, reason);
+        String cleanReason = requireReasonWhenNeeded(currentStatus, newStatus, reason);
+        CrewAssignmentDto cleanCrew = requireCrewIfGoingToField(newStatus, crew);
 
         // CUPO: solo la admisión (INGRESADO -> ADMITIDO) descuenta un cupo diario.
         if (currentStatus == RequestStatus.INGRESADO && newStatus == RequestStatus.ADMITIDO) {
@@ -174,20 +178,24 @@ public class RequestService {
 
         request.setStatus(newStatus);
         RequestEntity saved = repository.save(request);
-        recordChange(saved, currentStatus, newStatus, cleanReason, actor);
-        events.publishEvent(RequestStatusChangedEvent.from(saved, cleanReason));
+        recordChange(saved, currentStatus, newStatus, cleanReason, cleanCrew, actor);
+        events.publishEvent(RequestStatusChangedEvent.from(saved, cleanReason, currentStatus));
         // TODO: Kafka (auditoría/métricas)
         return saved;
     }
 
-    /** Al rechazar el motivo es obligatorio; en los demás estados no se guarda. */
-    private static String requireReasonIfRejected(RequestStatus newStatus, String reason) {
-        if (newStatus != RequestStatus.RECHAZADO) {
+    /** Rechazar y cancelar en terreno exigen motivo; en los demás cambios no se guarda. */
+    private static String requireReasonWhenNeeded(RequestStatus current, RequestStatus newStatus, String reason) {
+        boolean rejecting = newStatus == RequestStatus.RECHAZADO;
+        boolean cancellingInField = current == RequestStatus.EN_TERRENO && newStatus == RequestStatus.EN_GESTION;
+        if (!rejecting && !cancellingInField) {
             return null;
         }
         String clean = reason == null ? "" : reason.trim();
         if (clean.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes indicar el motivo del rechazo");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, rejecting
+                    ? "Debes indicar el motivo del rechazo"
+                    : "Debes indicar el motivo de la cancelación en terreno");
         }
         if (clean.length() > REASON_MAX_LENGTH) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -196,8 +204,37 @@ public class RequestService {
         return clean;
     }
 
+    /** Al pasar a EN_TERRENO se exige la cuadrilla (nombre, integrantes, patente); en los demás cambios se ignora. */
+    private static CrewAssignmentDto requireCrewIfGoingToField(RequestStatus newStatus, CrewAssignmentDto crew) {
+        if (newStatus != RequestStatus.EN_TERRENO) {
+            return null;
+        }
+        String name = clean(crew == null ? null : crew.name());
+        String members = clean(crew == null ? null : crew.members());
+        String plate = clean(crew == null ? null : crew.vehiclePlate());
+        if (name == null || members == null || plate == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Para pasar a EN_TERRENO debes indicar el nombre de la cuadrilla, sus integrantes y la patente del vehículo");
+        }
+        return new CrewAssignmentDto(name, members, plate.toUpperCase(Locale.ROOT),
+                clean(crew.vehicleType()), clean(crew.contactPhone()));
+    }
+
+    private static String clean(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     private void recordChange(RequestEntity request, RequestStatus from, RequestStatus to, String reason,
             Requester actor) {
+        recordChange(request, from, to, reason, null, actor);
+    }
+
+    private void recordChange(RequestEntity request, RequestStatus from, RequestStatus to, String reason,
+            CrewAssignmentDto crew, Requester actor) {
         RequestStatusHistoryEntity entry = new RequestStatusHistoryEntity();
         entry.setRequestId(request.getId());
         entry.setFromStatus(from);
@@ -207,6 +244,13 @@ public class RequestService {
         entry.setChangedByEmail(actor.email());
         entry.setChangedByRole(actor.primaryRole());
         entry.setReason(reason);
+        if (crew != null) {
+            entry.setCrewName(crew.name());
+            entry.setCrewMembers(crew.members());
+            entry.setCrewVehiclePlate(crew.vehiclePlate());
+            entry.setCrewVehicleType(crew.vehicleType());
+            entry.setCrewPhone(crew.contactPhone());
+        }
         history.save(entry);
     }
 

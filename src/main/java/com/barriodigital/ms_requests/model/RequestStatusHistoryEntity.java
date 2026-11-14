@@ -64,7 +64,23 @@ public class RequestStatusHistoryEntity {
     @Column(name = "changed_by_role", length = 30)
     private String changedByRole;
 
-    /** Motivo del cambio; hoy solo se pide (y se guarda) al rechazar. */
+    /** Motivo del cambio; se pide (y se guarda) al rechazar y al cancelar en terreno. */
     @Column(length = 500)
     private String reason;
+
+    // Cuadrilla asignada: solo en el cambio a EN_TERRENO. Al reasignar queda un registro por cuadrilla.
+    @Column(name = "crew_name", length = 100)
+    private String crewName;
+
+    @Column(name = "crew_members", length = 300)
+    private String crewMembers;
+
+    @Column(name = "crew_vehicle_plate", length = 20)
+    private String crewVehiclePlate;
+
+    @Column(name = "crew_vehicle_type", length = 60)
+    private String crewVehicleType;
+
+    @Column(name = "crew_phone", length = 30)
+    private String crewPhone;
 }

@@ -1,5 +1,6 @@
 package com.barriodigital.ms_requests.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -18,6 +19,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -37,6 +39,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
 import com.barriodigital.ms_requests.config.SecurityConfig;
+import com.barriodigital.ms_requests.dto.CrewAssignmentDto;
 import com.barriodigital.ms_requests.exception.GlobalExceptionHandler;
 import com.barriodigital.ms_requests.model.RequestEntity;
 import com.barriodigital.ms_requests.model.RequestStatus;
@@ -131,7 +134,7 @@ class RequestControllerStatusTest {
 
     @Test
     void unaTransicionNoPermitidaResponde409ConElMensajeDelServicio() throws Exception {
-        when(service.updateStatus(eq(5L), eq(RequestStatus.EN_TERRENO), any(), any(), any()))
+        when(service.updateStatus(eq(5L), eq(RequestStatus.EN_TERRENO), any(), any(), any(), any()))
                 .thenThrow(new ResponseStatusException(HttpStatus.CONFLICT,
                         "No se puede pasar a EN_TERRENO sin haber sido admitida (estado actual: INGRESADO)"));
 
@@ -146,18 +149,18 @@ class RequestControllerStatusTest {
         RequestEntity updated = new RequestEntity();
         updated.setId(5L);
         updated.setStatus(RequestStatus.ADMITIDO);
-        when(service.updateStatus(eq(5L), eq(RequestStatus.ADMITIDO), any(), any(), any())).thenReturn(updated);
+        when(service.updateStatus(eq(5L), eq(RequestStatus.ADMITIDO), any(), any(), any(), any())).thenReturn(updated);
 
         changeStatus(token("Operador"), "{\"status\":\"ADMITIDO\"}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ADMITIDO"));
 
-        verify(service).updateStatus(eq(5L), eq(RequestStatus.ADMITIDO), any(), any(), any());
+        verify(service).updateStatus(eq(5L), eq(RequestStatus.ADMITIDO), any(), any(), any(), any());
     }
 
     @Test
     void elAdminTambienPuedeCambiarEstados() throws Exception {
-        when(service.updateStatus(eq(5L), eq(RequestStatus.ADMITIDO), any(), any(), any())).thenReturn(new RequestEntity());
+        when(service.updateStatus(eq(5L), eq(RequestStatus.ADMITIDO), any(), any(), any(), any())).thenReturn(new RequestEntity());
 
         changeStatus(token("Admin"), "{\"status\":\"ADMITIDO\"}").andExpect(status().isOk());
     }
@@ -190,7 +193,7 @@ class RequestControllerStatusTest {
 
     @Test
     void rechazarSinMotivoResponde400ConElMensajeDelServicio() throws Exception {
-        when(service.updateStatus(eq(5L), eq(RequestStatus.RECHAZADO), any(), any(), any()))
+        when(service.updateStatus(eq(5L), eq(RequestStatus.RECHAZADO), any(), any(), any(), any()))
                 .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes indicar el motivo del rechazo"));
 
         changeStatus(token("Operador"), "{\"status\":\"RECHAZADO\"}")
@@ -205,6 +208,33 @@ class RequestControllerStatusTest {
         changeStatus(token("Operador"), "{\"status\":\"RECHAZADO\",\"reason\":\"" + largo + "\"}")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fieldErrors.reason").value("El motivo no puede superar los 500 caracteres"));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void laCuadrillaDelCuerpoLlegaAlServicio() throws Exception {
+        when(service.updateStatus(eq(5L), eq(RequestStatus.EN_TERRENO), any(), any(), any(), any()))
+                .thenReturn(new RequestEntity());
+
+        changeStatus(token("Operador"), "{\"status\":\"EN_TERRENO\",\"crew\":{\"name\":\"Cuadrilla Norte\","
+                + "\"members\":\"J. Pérez, M. Soto\",\"vehiclePlate\":\"ABCD12\"}}")
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<CrewAssignmentDto> crew = ArgumentCaptor.forClass(CrewAssignmentDto.class);
+        verify(service).updateStatus(eq(5L), eq(RequestStatus.EN_TERRENO), any(), crew.capture(), any(), any());
+        assertThat(crew.getValue().name()).isEqualTo("Cuadrilla Norte");
+        assertThat(crew.getValue().members()).isEqualTo("J. Pérez, M. Soto");
+        assertThat(crew.getValue().vehiclePlate()).isEqualTo("ABCD12");
+    }
+
+    @Test
+    void unaPatenteDemasiadoLargaResponde400SinLlamarAlServicio() throws Exception {
+        changeStatus(token("Operador"), "{\"status\":\"EN_TERRENO\",\"crew\":{\"name\":\"C\","
+                + "\"members\":\"M\",\"vehiclePlate\":\"" + "A".repeat(21) + "\"}}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors['crew.vehiclePlate']")
+                        .value("La patente no puede superar los 20 caracteres"));
 
         verifyNoInteractions(service);
     }

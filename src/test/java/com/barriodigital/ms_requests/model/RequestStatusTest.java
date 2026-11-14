@@ -17,7 +17,8 @@ class RequestStatusTest {
             "EN_GESTION, EN_TERRENO",
             "EN_GESTION, RESUELTO",
             "EN_GESTION, RECHAZADO",
-            "EN_TERRENO, RESUELTO"
+            "EN_TERRENO, RESUELTO",
+            "EN_TERRENO, EN_GESTION"
     })
     void permiteLasTransicionesDeLaTabla(RequestStatus from, RequestStatus to) {
         assertThat(from.canTransitionTo(to)).isTrue();
@@ -33,8 +34,8 @@ class RequestStatusTest {
                 }
             }
         }
-        // Las 8 de la tabla: cualquier otra combinación (incluida repetir el estado) no es una transición.
-        assertThat(permitidas).isEqualTo(8);
+        // Las 9 de la tabla: cualquier otra combinación (incluida repetir el estado) no es una transición.
+        assertThat(permitidas).isEqualTo(9);
     }
 
     @Test
