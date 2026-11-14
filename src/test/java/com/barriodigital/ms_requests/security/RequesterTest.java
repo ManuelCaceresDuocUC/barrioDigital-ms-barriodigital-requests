@@ -75,4 +75,17 @@ class RequesterTest {
         assertThat(new Requester("u", null, null, Set.of("Auditor")).canActOnBehalf()).isFalse();
         assertThat(new Requester("u", null, null, Set.of("Cliente")).canActOnBehalf()).isFalse();
     }
+
+    @Test
+    void elRolPrincipalSigueElOrdenAdminOperadorAuditorCliente() {
+        assertThat(new Requester("1", null, null, Set.of("Cliente", "Operador")).primaryRole()).isEqualTo("Operador");
+        assertThat(new Requester("1", null, null, Set.of("Operador", "Admin")).primaryRole()).isEqualTo("Admin");
+        assertThat(new Requester("1", null, null, Set.of("Auditor")).primaryRole()).isEqualTo("Auditor");
+    }
+
+    @Test
+    void sinRolesConocidosElRolPrincipalEsCliente() {
+        assertThat(new Requester("1", null, null, Set.of()).primaryRole()).isEqualTo("Cliente");
+        assertThat(new Requester("1", null, null, Set.of("Otro")).primaryRole()).isEqualTo("Cliente");
+    }
 }

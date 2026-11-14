@@ -19,13 +19,15 @@ import org.springframework.web.server.ResponseStatusException;
 import com.barriodigital.ms_requests.client.CatalogClient;
 import com.barriodigital.ms_requests.model.RequestEntity;
 import com.barriodigital.ms_requests.repository.RequestRepository;
+import com.barriodigital.ms_requests.repository.RequestStatusHistoryRepository;
 import com.barriodigital.ms_requests.security.Requester;
 
 class RequestServiceQueryTest {
 
     private final RequestRepository repository = mock(RequestRepository.class);
+    private final RequestStatusHistoryRepository history = mock(RequestStatusHistoryRepository.class);
     private final RequestService service = new RequestService(
-            repository, mock(CatalogClient.class), mock(ApplicationEventPublisher.class));
+            repository, history, mock(CatalogClient.class), mock(ApplicationEventPublisher.class));
 
     private static Requester requester(String oid, String role) {
         return new Requester(oid, role + "@municipio.cl", role, Set.of(role));

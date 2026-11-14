@@ -131,7 +131,7 @@ class RequestControllerStatusTest {
 
     @Test
     void unaTransicionNoPermitidaResponde409ConElMensajeDelServicio() throws Exception {
-        when(service.updateStatus(eq(5L), eq(RequestStatus.EN_TERRENO), any()))
+        when(service.updateStatus(eq(5L), eq(RequestStatus.EN_TERRENO), any(), any(), any()))
                 .thenThrow(new ResponseStatusException(HttpStatus.CONFLICT,
                         "No se puede pasar a EN_TERRENO sin haber sido admitida (estado actual: INGRESADO)"));
 
@@ -146,18 +146,18 @@ class RequestControllerStatusTest {
         RequestEntity updated = new RequestEntity();
         updated.setId(5L);
         updated.setStatus(RequestStatus.ADMITIDO);
-        when(service.updateStatus(eq(5L), eq(RequestStatus.ADMITIDO), any())).thenReturn(updated);
+        when(service.updateStatus(eq(5L), eq(RequestStatus.ADMITIDO), any(), any(), any())).thenReturn(updated);
 
         changeStatus(token("Operador"), "{\"status\":\"ADMITIDO\"}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ADMITIDO"));
 
-        verify(service).updateStatus(eq(5L), eq(RequestStatus.ADMITIDO), any());
+        verify(service).updateStatus(eq(5L), eq(RequestStatus.ADMITIDO), any(), any(), any());
     }
 
     @Test
     void elAdminTambienPuedeCambiarEstados() throws Exception {
-        when(service.updateStatus(eq(5L), eq(RequestStatus.ADMITIDO), any())).thenReturn(new RequestEntity());
+        when(service.updateStatus(eq(5L), eq(RequestStatus.ADMITIDO), any(), any(), any())).thenReturn(new RequestEntity());
 
         changeStatus(token("Admin"), "{\"status\":\"ADMITIDO\"}").andExpect(status().isOk());
     }
@@ -175,5 +175,37 @@ class RequestControllerStatusTest {
         mockMvc.perform(put("/api/requests/5/status")
                         .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"ADMITIDO\"}"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void elMotivoDelCuerpoLlegaAlServicio() throws Exception {
+        when(service.updateStatus(eq(5L), eq(RequestStatus.RECHAZADO), eq("Falta el comprobante"), any(), any()))
+                .thenReturn(new RequestEntity());
+
+        changeStatus(token("Operador"), "{\"status\":\"RECHAZADO\",\"reason\":\"Falta el comprobante\"}")
+                .andExpect(status().isOk());
+
+        verify(service).updateStatus(eq(5L), eq(RequestStatus.RECHAZADO), eq("Falta el comprobante"), any(), any());
+    }
+
+    @Test
+    void rechazarSinMotivoResponde400ConElMensajeDelServicio() throws Exception {
+        when(service.updateStatus(eq(5L), eq(RequestStatus.RECHAZADO), any(), any(), any()))
+                .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes indicar el motivo del rechazo"));
+
+        changeStatus(token("Operador"), "{\"status\":\"RECHAZADO\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Debes indicar el motivo del rechazo"));
+    }
+
+    @Test
+    void unMotivoDemasiadoLargoResponde400SinLlamarAlServicio() throws Exception {
+        String largo = "x".repeat(501);
+
+        changeStatus(token("Operador"), "{\"status\":\"RECHAZADO\",\"reason\":\"" + largo + "\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.reason").value("El motivo no puede superar los 500 caracteres"));
+
+        verifyNoInteractions(service);
     }
 }

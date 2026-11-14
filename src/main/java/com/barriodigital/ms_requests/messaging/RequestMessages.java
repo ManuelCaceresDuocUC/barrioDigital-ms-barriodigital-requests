@@ -13,6 +13,9 @@ final class RequestMessages {
                 ? "Hola" : "Hola " + event.requesterName();
         String body = "%s, tu trámite N° %d (%s) cambió al estado %s."
                 .formatted(greeting, event.requestId(), event.type(), event.status().name().replace('_', ' '));
+        if (event.reason() != null && !event.reason().isBlank()) {
+            body += " Motivo: " + event.reason().trim();
+        }
         return new EmailNotificationEvent(
                 event.requesterEmail(), subject(event.status()), body, String.valueOf(event.requestId()));
     }
