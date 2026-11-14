@@ -22,7 +22,8 @@ public enum RequestStatus {
             case INGRESADO -> EnumSet.of(ADMITIDO, RECHAZADO);
             case ADMITIDO -> EnumSet.of(EN_GESTION, RECHAZADO);
             case EN_GESTION -> EnumSet.of(EN_TERRENO, RESUELTO, RECHAZADO);
-            case EN_TERRENO -> EnumSet.of(RESUELTO);
+            // EN_GESTION: la cuadrilla no pudo cumplir la tarea; vuelve a gestión para reasignarla o rechazarla
+            case EN_TERRENO -> EnumSet.of(RESUELTO, EN_GESTION);
             case RESUELTO, RECHAZADO -> EnumSet.noneOf(RequestStatus.class);
         };
     }

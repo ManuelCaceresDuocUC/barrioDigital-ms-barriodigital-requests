@@ -23,6 +23,12 @@ public class RequestNotificationPublisher {
     // el alta de trámites, que no corre dentro de una transacción propia.
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onStatusChanged(RequestStatusChangedEvent event) {
+        if (event.isInternalOnly()) {
+            log.info("Trámite {} vuelve a gestión desde terreno: sin correo al solicitante ni ticket",
+                    event.requestId());
+            return;
+        }
+
         String traceId = UUID.randomUUID().toString();
 
         if (hasText(event.requesterEmail())) {

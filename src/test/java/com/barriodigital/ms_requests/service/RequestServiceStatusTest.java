@@ -20,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.barriodigital.ms_requests.client.CatalogClient;
+import com.barriodigital.ms_requests.dto.CrewAssignmentDto;
 import com.barriodigital.ms_requests.messaging.RequestStatusChangedEvent;
 import com.barriodigital.ms_requests.model.RequestEntity;
 import com.barriodigital.ms_requests.model.RequestStatus;
@@ -37,6 +38,8 @@ class RequestServiceStatusTest {
 
     private static final Requester OPERADOR =
             new Requester("oid-olga", "olga@municipio.cl", "Olga Operadora", Set.of("Operador"));
+    private static final CrewAssignmentDto CUADRILLA =
+            new CrewAssignmentDto("Cuadrilla Norte", "J. Pérez, M. Soto", "ABCD12", null, null);
 
     private RequestEntity givenRequestInStatus(RequestStatus status) {
         RequestEntity request = new RequestEntity();
@@ -52,7 +55,7 @@ class RequestServiceStatusTest {
     private void assertConflict(RequestStatus from, RequestStatus to) {
         RequestEntity request = givenRequestInStatus(from);
 
-        assertThatThrownBy(() -> service.updateStatus(5L, to, null, OPERADOR, "token"))
+        assertThatThrownBy(() -> service.updateStatus(5L, to, null, null, OPERADOR, "token"))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
 
@@ -68,7 +71,7 @@ class RequestServiceStatusTest {
     void cambiarDeEstadoPublicaUnEventoConElNuevoEstado() {
         givenRequestInStatus(RequestStatus.ADMITIDO);
 
-        service.updateStatus(5L, RequestStatus.EN_GESTION, null, OPERADOR, "token");
+        service.updateStatus(5L, RequestStatus.EN_GESTION, null, null, OPERADOR, "token");
 
         ArgumentCaptor<RequestStatusChangedEvent> captor = ArgumentCaptor.forClass(RequestStatusChangedEvent.class);
         verify(events).publishEvent(captor.capture());
@@ -80,7 +83,7 @@ class RequestServiceStatusTest {
     void admitirDescuentaUnCupoYGuardaElNuevoEstado() {
         givenRequestInStatus(RequestStatus.INGRESADO);
 
-        RequestEntity saved = service.updateStatus(5L, RequestStatus.ADMITIDO, null, OPERADOR, "token");
+        RequestEntity saved = service.updateStatus(5L, RequestStatus.ADMITIDO, null, null, OPERADOR, "token");
 
         assertThat(saved.getStatus()).isEqualTo(RequestStatus.ADMITIDO);
         verify(catalog).consumeQuota(7L, "token");
@@ -90,7 +93,7 @@ class RequestServiceStatusTest {
     void losDemasCambiosNoDescuentanCupo() {
         givenRequestInStatus(RequestStatus.EN_GESTION);
 
-        service.updateStatus(5L, RequestStatus.EN_TERRENO, null, OPERADOR, "token");
+        service.updateStatus(5L, RequestStatus.EN_TERRENO, null, CUADRILLA, OPERADOR, "token");
 
         verify(catalog, never()).consumeQuota(anyLong(), anyString());
     }
@@ -99,7 +102,7 @@ class RequestServiceStatusTest {
     void sePuedeResolverDirectamenteDesdeGestion() {
         givenRequestInStatus(RequestStatus.EN_GESTION);
 
-        assertThat(service.updateStatus(5L, RequestStatus.RESUELTO, null, OPERADOR, "token").getStatus())
+        assertThat(service.updateStatus(5L, RequestStatus.RESUELTO, null, null, OPERADOR, "token").getStatus())
                 .isEqualTo(RequestStatus.RESUELTO);
     }
 
@@ -109,7 +112,7 @@ class RequestServiceStatusTest {
     void noSePuedePasarAEnTerrenoSinHaberSidoAdmitida() {
         RequestEntity request = givenRequestInStatus(RequestStatus.INGRESADO);
 
-        assertThatThrownBy(() -> service.updateStatus(5L, RequestStatus.EN_TERRENO, null, OPERADOR, "token"))
+        assertThatThrownBy(() -> service.updateStatus(5L, RequestStatus.EN_TERRENO, null, null, OPERADOR, "token"))
                 .isInstanceOfSatisfying(ResponseStatusException.class, ex -> {
                     assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
                     assertThat(ex.getReason()).contains("sin haber sido admitida");
@@ -126,11 +129,11 @@ class RequestServiceStatusTest {
     @Test
     void noSePuedeRetrocederNiReabrirUnaSolicitud() {
         assertConflict(RequestStatus.ADMITIDO, RequestStatus.INGRESADO);
-        assertConflict(RequestStatus.EN_TERRENO, RequestStatus.EN_GESTION);
+        assertConflict(RequestStatus.EN_TERRENO, RequestStatus.ADMITIDO);
     }
 
     @Test
-    void desdeTerrenoSoloSePuedeResolver() {
+    void desdeTerrenoNoSePuedeRechazar() {
         assertConflict(RequestStatus.EN_TERRENO, RequestStatus.RECHAZADO);
     }
 
@@ -144,7 +147,7 @@ class RequestServiceStatusTest {
     void elMensajeDeUnaTransicionInvalidaIndicaLasOpciones() {
         givenRequestInStatus(RequestStatus.ADMITIDO);
 
-        assertThatThrownBy(() -> service.updateStatus(5L, RequestStatus.RESUELTO, null, OPERADOR, "token"))
+        assertThatThrownBy(() -> service.updateStatus(5L, RequestStatus.RESUELTO, null, null, OPERADOR, "token"))
                 .isInstanceOfSatisfying(ResponseStatusException.class, ex ->
                         assertThat(ex.getReason())
                                 .contains("de ADMITIDO a RESUELTO")
@@ -156,7 +159,7 @@ class RequestServiceStatusTest {
     void elMensajeDeUnEstadoFinalLoIndica() {
         givenRequestInStatus(RequestStatus.RESUELTO);
 
-        assertThatThrownBy(() -> service.updateStatus(5L, RequestStatus.ADMITIDO, null, OPERADOR, "token"))
+        assertThatThrownBy(() -> service.updateStatus(5L, RequestStatus.ADMITIDO, null, null, OPERADOR, "token"))
                 .isInstanceOfSatisfying(ResponseStatusException.class, ex ->
                         assertThat(ex.getReason()).contains("RESUELTO es un estado final"));
     }
@@ -167,7 +170,7 @@ class RequestServiceStatusTest {
     void repetirElMismoEstadoNoVuelveANotificar() {
         givenRequestInStatus(RequestStatus.ADMITIDO);
 
-        service.updateStatus(5L, RequestStatus.ADMITIDO, null, OPERADOR, "token");
+        service.updateStatus(5L, RequestStatus.ADMITIDO, null, null, OPERADOR, "token");
 
         verify(events, never()).publishEvent(any(Object.class));
     }
@@ -176,7 +179,7 @@ class RequestServiceStatusTest {
     void repetirElMismoEstadoNoTieneEfectosSecundarios() {
         givenRequestInStatus(RequestStatus.ADMITIDO);
 
-        RequestEntity result = service.updateStatus(5L, RequestStatus.ADMITIDO, null, OPERADOR, "token");
+        RequestEntity result = service.updateStatus(5L, RequestStatus.ADMITIDO, null, null, OPERADOR, "token");
 
         assertThat(result.getStatus()).isEqualTo(RequestStatus.ADMITIDO);
         verify(repository, never()).save(any(RequestEntity.class));
@@ -187,8 +190,8 @@ class RequestServiceStatusTest {
     void repetirAdmitirNoGastaOtroCupo() {
         givenRequestInStatus(RequestStatus.ADMITIDO);
 
-        service.updateStatus(5L, RequestStatus.ADMITIDO, null, OPERADOR, "token");
-        service.updateStatus(5L, RequestStatus.ADMITIDO, null, OPERADOR, "token");
+        service.updateStatus(5L, RequestStatus.ADMITIDO, null, null, OPERADOR, "token");
+        service.updateStatus(5L, RequestStatus.ADMITIDO, null, null, OPERADOR, "token");
 
         verify(catalog, never()).consumeQuota(anyLong(), anyString());
     }
@@ -197,7 +200,7 @@ class RequestServiceStatusTest {
     void repetirUnEstadoFinalTambienEsIdempotente() {
         givenRequestInStatus(RequestStatus.RESUELTO);
 
-        assertThat(service.updateStatus(5L, RequestStatus.RESUELTO, null, OPERADOR, "token").getStatus())
+        assertThat(service.updateStatus(5L, RequestStatus.RESUELTO, null, null, OPERADOR, "token").getStatus())
                 .isEqualTo(RequestStatus.RESUELTO);
         verify(events, never()).publishEvent(any(Object.class));
     }
@@ -208,7 +211,7 @@ class RequestServiceStatusTest {
     void unaSolicitudInexistenteEsUn404() {
         when(repository.findByIdForUpdate(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.updateStatus(99L, RequestStatus.ADMITIDO, null, OPERADOR, "token"))
+        assertThatThrownBy(() -> service.updateStatus(99L, RequestStatus.ADMITIDO, null, null, OPERADOR, "token"))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
     }

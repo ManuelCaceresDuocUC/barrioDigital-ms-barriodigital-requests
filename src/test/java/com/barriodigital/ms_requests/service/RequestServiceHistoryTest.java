@@ -109,7 +109,7 @@ class RequestServiceHistoryTest {
     void cambiarDeEstadoRegistraDeDondeAdondeYQuienLoHizo() {
         givenRequestInStatus(RequestStatus.ADMITIDO);
 
-        service.updateStatus(5L, RequestStatus.EN_GESTION, null, OPERADOR, "token");
+        service.updateStatus(5L, RequestStatus.EN_GESTION, null, null, OPERADOR, "token");
 
         RequestStatusHistoryEntity saved = lastSavedEntry();
         assertThat(saved.getRequestId()).isEqualTo(5L);
@@ -125,7 +125,7 @@ class RequestServiceHistoryTest {
     void unaTransicionInvalidaNoDejaNadaEnElHistorial() {
         givenRequestInStatus(RequestStatus.INGRESADO);
 
-        assertThatThrownBy(() -> service.updateStatus(5L, RequestStatus.EN_TERRENO, null, OPERADOR, "token"))
+        assertThatThrownBy(() -> service.updateStatus(5L, RequestStatus.EN_TERRENO, null, null, OPERADOR, "token"))
                 .isInstanceOf(ResponseStatusException.class);
 
         verify(history, never()).save(any(RequestStatusHistoryEntity.class));
@@ -135,7 +135,7 @@ class RequestServiceHistoryTest {
     void pedirElEstadoActualNoRegistraNada() {
         givenRequestInStatus(RequestStatus.ADMITIDO);
 
-        service.updateStatus(5L, RequestStatus.ADMITIDO, null, OPERADOR, "token");
+        service.updateStatus(5L, RequestStatus.ADMITIDO, null, null, OPERADOR, "token");
 
         verify(history, never()).save(any(RequestStatusHistoryEntity.class));
     }
@@ -147,7 +147,7 @@ class RequestServiceHistoryTest {
         for (String vacio : new String[] { null, "", "   " }) {
             RequestEntity request = givenRequestInStatus(RequestStatus.EN_GESTION);
 
-            assertThatThrownBy(() -> service.updateStatus(5L, RequestStatus.RECHAZADO, vacio, OPERADOR, "token"))
+            assertThatThrownBy(() -> service.updateStatus(5L, RequestStatus.RECHAZADO, vacio, null, OPERADOR, "token"))
                     .isInstanceOfSatisfying(ResponseStatusException.class, ex -> {
                         assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
                         assertThat(ex.getReason()).contains("motivo");
@@ -164,7 +164,7 @@ class RequestServiceHistoryTest {
     void rechazarGuardaElMotivoSinEspaciosYLoLlevaEnElEvento() {
         givenRequestInStatus(RequestStatus.EN_GESTION);
 
-        service.updateStatus(5L, RequestStatus.RECHAZADO, "  Falta el certificado de domicilio  ", OPERADOR, "token");
+        service.updateStatus(5L, RequestStatus.RECHAZADO, "  Falta el certificado de domicilio  ", null, OPERADOR, "token");
 
         RequestStatusHistoryEntity saved = lastSavedEntry();
         assertThat(saved.getToStatus()).isEqualTo(RequestStatus.RECHAZADO);
@@ -179,7 +179,7 @@ class RequestServiceHistoryTest {
     void sePuedeRechazarEstandoEnGestion() {
         RequestEntity request = givenRequestInStatus(RequestStatus.EN_GESTION);
 
-        service.updateStatus(5L, RequestStatus.RECHAZADO, "No corresponde a la comuna", OPERADOR, "token");
+        service.updateStatus(5L, RequestStatus.RECHAZADO, "No corresponde a la comuna", null, OPERADOR, "token");
 
         assertThat(request.getStatus()).isEqualTo(RequestStatus.RECHAZADO);
     }
@@ -189,7 +189,7 @@ class RequestServiceHistoryTest {
         givenRequestInStatus(RequestStatus.ADMITIDO);
         String largo = "x".repeat(501);
 
-        assertThatThrownBy(() -> service.updateStatus(5L, RequestStatus.RECHAZADO, largo, OPERADOR, "token"))
+        assertThatThrownBy(() -> service.updateStatus(5L, RequestStatus.RECHAZADO, largo, null, OPERADOR, "token"))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
 
@@ -200,7 +200,7 @@ class RequestServiceHistoryTest {
     void enLosDemasEstadosElMotivoSeIgnora() {
         givenRequestInStatus(RequestStatus.ADMITIDO);
 
-        service.updateStatus(5L, RequestStatus.EN_GESTION, "texto que no debe guardarse", OPERADOR, "token");
+        service.updateStatus(5L, RequestStatus.EN_GESTION, "texto que no debe guardarse", null, OPERADOR, "token");
 
         assertThat(lastSavedEntry().getReason()).isNull();
         ArgumentCaptor<RequestStatusChangedEvent> captor = ArgumentCaptor.forClass(RequestStatusChangedEvent.class);
@@ -212,7 +212,7 @@ class RequestServiceHistoryTest {
     void unaTransicionInvalidaTienePrioridadSobreLaFaltaDeMotivo() {
         givenRequestInStatus(RequestStatus.EN_TERRENO);
 
-        assertThatThrownBy(() -> service.updateStatus(5L, RequestStatus.RECHAZADO, null, OPERADOR, "token"))
+        assertThatThrownBy(() -> service.updateStatus(5L, RequestStatus.RECHAZADO, null, null, OPERADOR, "token"))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
     }
