@@ -182,13 +182,13 @@ class RequestControllerStatusTest {
 
     @Test
     void elMotivoDelCuerpoLlegaAlServicio() throws Exception {
-        when(service.updateStatus(eq(5L), eq(RequestStatus.RECHAZADO), eq("Falta el comprobante"), any(), any()))
+        when(service.updateStatus(eq(5L), eq(RequestStatus.RECHAZADO), eq("Falta el comprobante"), any(), any(), any()))
                 .thenReturn(new RequestEntity());
 
         changeStatus(token("Operador"), "{\"status\":\"RECHAZADO\",\"reason\":\"Falta el comprobante\"}")
                 .andExpect(status().isOk());
 
-        verify(service).updateStatus(eq(5L), eq(RequestStatus.RECHAZADO), eq("Falta el comprobante"), any(), any());
+        verify(service).updateStatus(eq(5L), eq(RequestStatus.RECHAZADO), eq("Falta el comprobante"), any(), any(), any());
     }
 
     @Test
