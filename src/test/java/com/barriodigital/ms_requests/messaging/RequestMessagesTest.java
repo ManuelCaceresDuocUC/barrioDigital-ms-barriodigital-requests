@@ -44,4 +44,20 @@ class RequestMessagesTest {
         assertThat(certificate.citizenRut()).isEqualTo("11111111-1");
         assertThat(certificate.certificateType()).isEqualTo("Certificado de residencia");
     }
+
+    @Test
+    void elCorreoDeRechazoIncluyeElMotivo() {
+        RequestStatusChangedEvent rejected = new RequestStatusChangedEvent(15L, "Certificado de residencia",
+                "Calle Larga 123", RequestStatus.RECHAZADO, "ana@municipio.cl", "Ana", null, "Falta el comprobante");
+
+        assertThat(RequestMessages.email(rejected).body()).contains("RECHAZADO").contains("Motivo: Falta el comprobante");
+    }
+
+    @Test
+    void sinMotivoElCorreoNoMencionaUnMotivo() {
+        assertThat(RequestMessages.email(event(RequestStatus.ADMITIDO)).body()).doesNotContain("Motivo");
+        RequestStatusChangedEvent blank = new RequestStatusChangedEvent(15L, "Certificado", "Calle", RequestStatus.RECHAZADO,
+                "ana@municipio.cl", "Ana", null, "   ");
+        assertThat(RequestMessages.email(blank).body()).doesNotContain("Motivo");
+    }
 }

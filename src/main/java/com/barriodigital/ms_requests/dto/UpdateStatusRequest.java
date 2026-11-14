@@ -3,9 +3,18 @@ package com.barriodigital.ms_requests.dto;
 import com.barriodigital.ms_requests.model.RequestStatus;
 
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
-/** Cuerpo de {@code PUT /api/requests/{id}/status}. Un valor que no sea un estado se rechaza con 400. */
+/**
+ * Cuerpo de {@code PUT /api/requests/{id}/status}. Un valor que no sea un estado se rechaza con 400.
+ *
+ * @param reason motivo del cambio: obligatorio al pasar a RECHAZADO (lo valida el servicio) e ignorado
+ *               en los demás estados
+ */
 public record UpdateStatusRequest(
         @NotNull(message = "El estado es obligatorio")
-        RequestStatus status) {
+        RequestStatus status,
+
+        @Size(max = 500, message = "El motivo no puede superar los 500 caracteres")
+        String reason) {
 }

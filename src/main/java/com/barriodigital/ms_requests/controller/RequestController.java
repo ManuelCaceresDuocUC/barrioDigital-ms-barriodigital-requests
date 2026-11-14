@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.barriodigital.ms_requests.dto.CreateRequestDto;
+import com.barriodigital.ms_requests.dto.StatusChangeResponse;
 import com.barriodigital.ms_requests.dto.UpdateStatusRequest;
 import com.barriodigital.ms_requests.model.RequestEntity;
 import com.barriodigital.ms_requests.security.Requester;
@@ -54,13 +55,22 @@ public class RequestController {
         return ResponseEntity.ok(service.getRequestById(id, Requester.from(jwt)));
     }
 
-    // Solo el Operador municipal y el Admin pueden cambiar estados
+    // Historial de cambios de estado: el personal ve todos; el Cliente solo el de sus solicitudes
+    @GetMapping("/{id}/history")
+    @PreAuthorize("hasAnyAuthority('Cliente', 'Operador', 'Admin', 'Auditor')")
+    public ResponseEntity<List<StatusChangeResponse>> getHistory(
+            @PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
+        return ResponseEntity.ok(service.getHistory(id, Requester.from(jwt)));
+    }
+
+    // Solo el Operador municipal y el Admin pueden cambiar estados. Al rechazar, el motivo es obligatorio.
     @PutMapping("/{id}/status")
     @PreAuthorize("hasAnyAuthority('Operador', 'Admin')")
     public ResponseEntity<RequestEntity> updateStatus(
             @PathVariable Long id,
             @Valid @RequestBody UpdateStatusRequest body,
             @AuthenticationPrincipal Jwt jwt) {
-        return ResponseEntity.ok(service.updateStatus(id, body.status(), jwt.getTokenValue()));
+        return ResponseEntity.ok(service.updateStatus(
+                id, body.status(), body.reason(), Requester.from(jwt), jwt.getTokenValue()));
     }
 }

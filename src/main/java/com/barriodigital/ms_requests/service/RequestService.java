@@ -13,10 +13,13 @@ import org.springframework.web.server.ResponseStatusException;
 import com.barriodigital.ms_requests.client.CatalogClient;
 import com.barriodigital.ms_requests.client.CatalogProcedure;
 import com.barriodigital.ms_requests.dto.CreateRequestDto;
+import com.barriodigital.ms_requests.dto.StatusChangeResponse;
 import com.barriodigital.ms_requests.messaging.RequestStatusChangedEvent;
 import com.barriodigital.ms_requests.model.RequestEntity;
 import com.barriodigital.ms_requests.model.RequestStatus;
+import com.barriodigital.ms_requests.model.RequestStatusHistoryEntity;
 import com.barriodigital.ms_requests.repository.RequestRepository;
+import com.barriodigital.ms_requests.repository.RequestStatusHistoryRepository;
 import com.barriodigital.ms_requests.security.Requester;
 
 import lombok.RequiredArgsConstructor;
@@ -27,10 +30,14 @@ public class RequestService {
 
     private static final String NOT_FOUND_MESSAGE = "Trámite no encontrado";
 
+    private static final int REASON_MAX_LENGTH = 500;
+
     private final RequestRepository repository;
+    private final RequestStatusHistoryRepository history;
     private final CatalogClient catalog;
     private final ApplicationEventPublisher events;
 
+    @Transactional
     public RequestEntity createRequest(CreateRequestDto dto, Requester requester, String bearerToken) {
         String ownerId = resolveOwner(dto, requester);
         Contact contact = resolveContact(dto, requester);
@@ -51,6 +58,7 @@ public class RequestService {
         request.setStatus(RequestStatus.INGRESADO);
         request.setCitizenRut(dto.citizenRut());
         RequestEntity saved = repository.save(request);
+        recordChange(saved, null, RequestStatus.INGRESADO, null, requester);
         events.publishEvent(RequestStatusChangedEvent.from(saved));
         return saved;
     }
@@ -72,6 +80,20 @@ public class RequestService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, NOT_FOUND_MESSAGE);
         }
         return request;
+    }
+
+    /**
+     * Historial de cambios de estado, del más antiguo al más reciente. Tiene la misma regla de acceso
+     * que {@link #getRequestById}: para un Cliente, la solicitud de otro vecino responde 404. El personal
+     * ve quién hizo cada cambio; el vecino solo ve el rol.
+     */
+    @Transactional(readOnly = true)
+    public List<StatusChangeResponse> getHistory(Long id, Requester requester) {
+        getRequestById(id, requester);
+        boolean showIdentity = requester.canViewAll();
+        return history.findByRequestIdOrderByChangedAtAscIdAsc(id).stream()
+                .map(entry -> StatusChangeResponse.from(entry, showIdentity))
+                .toList();
     }
 
     /**
@@ -121,9 +143,13 @@ public class RequestService {
      * <p>Pedir el estado que ya tiene la solicitud es idempotente: responde con la solicitud tal
      * cual, sin guardar, sin notificar y sin descontar cupo. Una transición fuera de la tabla de
      * {@link RequestStatus#allowedTransitions()} responde 409 y no cambia nada.
+     *
+     * <p>Rechazar exige un motivo (400 si falta); en los demás estados el motivo se ignora. Cada cambio
+     * queda en el historial junto con quién lo hizo, dentro de la misma transacción.
      */
     @Transactional
-    public RequestEntity updateStatus(Long id, RequestStatus newStatus, String bearerToken) {
+    public RequestEntity updateStatus(Long id, RequestStatus newStatus, String reason, Requester actor,
+            String bearerToken) {
         RequestEntity request = repository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, NOT_FOUND_MESSAGE));
         RequestStatus currentStatus = request.getStatus();
@@ -134,6 +160,8 @@ public class RequestService {
         if (!currentStatus.canTransitionTo(newStatus)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, invalidTransitionMessage(currentStatus, newStatus));
         }
+
+        String cleanReason = requireReasonIfRejected(newStatus, reason);
 
         // CUPO: solo la admisión (INGRESADO -> ADMITIDO) descuenta un cupo diario.
         if (currentStatus == RequestStatus.INGRESADO && newStatus == RequestStatus.ADMITIDO) {
@@ -146,9 +174,40 @@ public class RequestService {
 
         request.setStatus(newStatus);
         RequestEntity saved = repository.save(request);
-        events.publishEvent(RequestStatusChangedEvent.from(saved));
+        recordChange(saved, currentStatus, newStatus, cleanReason, actor);
+        events.publishEvent(RequestStatusChangedEvent.from(saved, cleanReason));
         // TODO: Kafka (auditoría/métricas)
         return saved;
+    }
+
+    /** Al rechazar el motivo es obligatorio; en los demás estados no se guarda. */
+    private static String requireReasonIfRejected(RequestStatus newStatus, String reason) {
+        if (newStatus != RequestStatus.RECHAZADO) {
+            return null;
+        }
+        String clean = reason == null ? "" : reason.trim();
+        if (clean.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debes indicar el motivo del rechazo");
+        }
+        if (clean.length() > REASON_MAX_LENGTH) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "El motivo no puede superar los " + REASON_MAX_LENGTH + " caracteres");
+        }
+        return clean;
+    }
+
+    private void recordChange(RequestEntity request, RequestStatus from, RequestStatus to, String reason,
+            Requester actor) {
+        RequestStatusHistoryEntity entry = new RequestStatusHistoryEntity();
+        entry.setRequestId(request.getId());
+        entry.setFromStatus(from);
+        entry.setToStatus(to);
+        entry.setChangedById(actor.userId());
+        entry.setChangedByName(actor.name());
+        entry.setChangedByEmail(actor.email());
+        entry.setChangedByRole(actor.primaryRole());
+        entry.setReason(reason);
+        history.save(entry);
     }
 
     private static String invalidTransitionMessage(RequestStatus current, RequestStatus target) {

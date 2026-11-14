@@ -24,6 +24,7 @@ import com.barriodigital.ms_requests.messaging.RequestStatusChangedEvent;
 import com.barriodigital.ms_requests.model.RequestEntity;
 import com.barriodigital.ms_requests.model.RequestStatus;
 import com.barriodigital.ms_requests.repository.RequestRepository;
+import com.barriodigital.ms_requests.repository.RequestStatusHistoryRepository;
 import com.barriodigital.ms_requests.security.Requester;
 
 class RequestServiceCreateTest {
@@ -31,7 +32,8 @@ class RequestServiceCreateTest {
     private final RequestRepository repository = mock(RequestRepository.class);
     private final CatalogClient catalog = mock(CatalogClient.class);
     private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
-    private final RequestService service = new RequestService(repository, catalog, events);
+    private final RequestStatusHistoryRepository history = mock(RequestStatusHistoryRepository.class);
+    private final RequestService service = new RequestService(repository, history, catalog, events);
 
     private static Requester cliente() {
         return new Requester("oid-ana", "ana@municipio.cl", "Ana", Set.of("Cliente"));
