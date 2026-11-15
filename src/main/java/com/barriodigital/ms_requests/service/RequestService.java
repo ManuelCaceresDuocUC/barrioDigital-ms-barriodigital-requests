@@ -179,8 +179,9 @@ public class RequestService {
         request.setStatus(newStatus);
         RequestEntity saved = repository.save(request);
         recordChange(saved, currentStatus, newStatus, cleanReason, cleanCrew, actor);
-        events.publishEvent(RequestStatusChangedEvent.from(saved, cleanReason, currentStatus));
-        // TODO: Kafka (auditoría/métricas)
+        events.publishEvent(RequestStatusChangedEvent.from(saved, cleanReason, currentStatus,
+                new RequestStatusChangedEvent.StaffAction(actor.userId(), actor.name(), actor.primaryRole(),
+                        cleanCrew)));
         return saved;
     }
 
