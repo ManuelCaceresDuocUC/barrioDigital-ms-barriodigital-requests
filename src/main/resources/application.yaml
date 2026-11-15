@@ -45,3 +45,13 @@ barriodigital:
       url: ${RABBITADMIN_SERVICE_URL:http://localhost:8086}
       connect-timeout: 2s
       read-timeout: 5s
+
+    # Streaming en Kafka (ec2-kafka). La publicación va después del commit y nunca hace fallar el trámite:
+    # si Kafka no responde, se registra el error. KAFKA_ENABLED=false la apaga (desarrollo sin broker).
+    kafka:
+      enabled: ${KAFKA_ENABLED:true}
+      bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+      send-timeout: 5s
+      topics:
+        request-events: requests.events
+        audit-timeline: audit.timeline

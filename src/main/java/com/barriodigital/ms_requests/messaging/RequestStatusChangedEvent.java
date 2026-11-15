@@ -1,5 +1,6 @@
 package com.barriodigital.ms_requests.messaging;
 
+import com.barriodigital.ms_requests.dto.CrewAssignmentDto;
 import com.barriodigital.ms_requests.model.RequestEntity;
 import com.barriodigital.ms_requests.model.RequestStatus;
 
@@ -8,6 +9,7 @@ import com.barriodigital.ms_requests.model.RequestStatus;
  *
  * @param reason         motivo del cambio (al rechazar o cancelar en terreno); nulo en los demás casos
  * @param previousStatus estado anterior; nulo al ingresar
+ * @param staffAction    quién hizo el cambio y con qué cuadrilla (para la auditoría en Kafka); nulo al ingresar
  */
 public record RequestStatusChangedEvent(
         Long requestId,
@@ -18,7 +20,19 @@ public record RequestStatusChangedEvent(
         String requesterName,
         String citizenRut,
         String reason,
-        RequestStatus previousStatus) {
+        RequestStatus previousStatus,
+        StaffAction staffAction) {
+
+    /** Actuación del personal que cambió el estado; no incluye correo ni RUT de nadie. */
+    public record StaffAction(String actorId, String actorName, String actorRole, CrewAssignmentDto crew) {
+    }
+
+    public RequestStatusChangedEvent(Long requestId, String type, String description, RequestStatus status,
+            String requesterEmail, String requesterName, String citizenRut, String reason,
+            RequestStatus previousStatus) {
+        this(requestId, type, description, status, requesterEmail, requesterName, citizenRut, reason,
+                previousStatus, null);
+    }
 
     public RequestStatusChangedEvent(Long requestId, String type, String description, RequestStatus status,
             String requesterEmail, String requesterName, String citizenRut, String reason) {
@@ -48,9 +62,14 @@ public record RequestStatusChangedEvent(
 
     public static RequestStatusChangedEvent from(RequestEntity request, String reason,
             RequestStatus previousStatus) {
+        return from(request, reason, previousStatus, null);
+    }
+
+    public static RequestStatusChangedEvent from(RequestEntity request, String reason,
+            RequestStatus previousStatus, StaffAction staffAction) {
         return new RequestStatusChangedEvent(
                 request.getId(), request.getType(), request.getDescription(), request.getStatus(),
                 request.getRequesterEmail(), request.getRequesterName(), request.getCitizenRut(), reason,
-                previousStatus);
+                previousStatus, staffAction);
     }
 }

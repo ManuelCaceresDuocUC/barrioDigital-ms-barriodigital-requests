@@ -214,6 +214,19 @@ class RequestServiceFieldCrewTest {
     }
 
     @Test
+    void elEventoLlevaQuienHizoElCambioParaLaAuditoriaEnKafka() {
+        givenRequestInStatus(RequestStatus.EN_TERRENO);
+
+        service.updateStatus(5L, RequestStatus.EN_GESTION, "Vehículo con falla", null, OPERADOR, "token");
+
+        ArgumentCaptor<RequestStatusChangedEvent> captor = ArgumentCaptor.forClass(RequestStatusChangedEvent.class);
+        verify(events).publishEvent(captor.capture());
+        assertThat(captor.getValue().staffAction()).isNotNull();
+        assertThat(captor.getValue().staffAction().actorId()).isEqualTo(OPERADOR.userId());
+        assertThat(captor.getValue().staffAction().actorRole()).isEqualTo(OPERADOR.primaryRole());
+    }
+
+    @Test
     void unaVezEnGestionSePuedeReasignarAOtraCuadrilla() {
         givenRequestInStatus(RequestStatus.EN_GESTION);
         CrewAssignmentDto otra = new CrewAssignmentDto("Cuadrilla Sur", "A. Rojas", "WXYZ98", null, null);
