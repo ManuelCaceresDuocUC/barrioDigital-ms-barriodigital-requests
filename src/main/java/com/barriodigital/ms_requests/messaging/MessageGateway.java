@@ -3,6 +3,9 @@ package com.barriodigital.ms_requests.messaging;
 /**
  * Puerta de salida de los mensajes de este servicio. La lógica de negocio solo conoce esta interfaz;
  * cómo llega el mensaje a RabbitMQ queda en la implementación.
+ *
+ * <p>PATRÓN: "gateway" / puerto. Permite cambiar la forma de publicar (hoy HTTP hacia rabbitadmin) sin
+ * tocar la lógica de negocio, y reemplazarla por un doble en los tests.
  */
 public interface MessageGateway {
 

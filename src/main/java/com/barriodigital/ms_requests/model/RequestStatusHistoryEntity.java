@@ -21,11 +21,14 @@ import lombok.Setter;
  * Un cambio de estado de una solicitud: de qué estado a cuál, cuándo, quién lo hizo y, si se rechazó,
  * por qué. El primer registro de cada solicitud es el ingreso ({@code fromStatus} nulo). Los registros
  * solo se agregan; nunca se modifican ni se borran.
+ *
+ * <p>QUÉ ES: entidad JPA de la tabla request_status_history (bitácora de cambios, solo se agregan filas).
  */
 @Getter
 @Setter
 @NoArgsConstructor
 @Entity
+// El índice por request_id acelera la consulta del historial de una solicitud.
 @Table(name = "request_status_history",
         indexes = @Index(name = "idx_status_history_request", columnList = "request_id"))
 public class RequestStatusHistoryEntity {
@@ -34,6 +37,7 @@ public class RequestStatusHistoryEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // Solicitud a la que pertenece este cambio (id simple, sin relación JPA).
     @Column(name = "request_id", nullable = false)
     private Long requestId;
 
@@ -46,6 +50,7 @@ public class RequestStatusHistoryEntity {
     @Column(name = "to_status", nullable = false)
     private RequestStatus toStatus;
 
+    // Fecha del cambio, puesta por Hibernate al insertar y nunca modificable (updatable = false).
     @CreationTimestamp
     @Column(name = "changed_at", nullable = false, updatable = false)
     private LocalDateTime changedAt;

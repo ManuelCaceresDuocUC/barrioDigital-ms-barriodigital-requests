@@ -6,6 +6,9 @@ package com.barriodigital.ms_requests.streaming;
  *
  * @param eventType      REQUEST_CREATED o REQUEST_STATUS_CHANGED
  * @param previousStatus estado anterior; nulo al ingresar
+ *
+ * <p>QUÉ ES: el JSON que consumen report (KPIs) y audit (registro). Su contrato debe mantenerse
+ * compatible con report/dto/RequestEvent.
  */
 public record RequestEventMessage(
         String eventId,

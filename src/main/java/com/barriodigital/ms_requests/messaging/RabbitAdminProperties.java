@@ -8,6 +8,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 /**
  * Cliente hacia ms-barriodigital-rabbitadmin, el único que habla con RabbitMQ. En Docker la URL
  * llega por la variable {@code RABBITADMIN_SERVICE_URL}.
+ *
+ * <p>QUÉ ES: record enlazado al bloque "barriodigital.rabbitadmin:" del yaml, con valores por defecto.
  */
 @ConfigurationProperties(prefix = "barriodigital.rabbitadmin")
 public record RabbitAdminProperties(

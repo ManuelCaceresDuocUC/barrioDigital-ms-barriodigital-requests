@@ -25,6 +25,12 @@ import com.barriodigital.ms_requests.service.RequestService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
+/**
+ * QUÉ ES: API REST de solicitudes (/api/requests). Es la capa de entrada: valida el rol (@PreAuthorize),
+ * extrae quién llama del JWT ({@link Requester}) y delega TODA la lógica en {@link RequestService}.
+ *
+ * @AuthenticationPrincipal Jwt jwt: Spring inyecta el token ya validado del usuario que hace la petición.
+ */
 @RestController
 @RequestMapping("/api/requests")
 @RequiredArgsConstructor
@@ -33,22 +39,26 @@ public class RequestController {
     private final RequestService service;
 
     // Cliente, Operador y Admin pueden crear solicitudes (el Operador, también a nombre de un vecino)
+    // POST /api/requests -> 201 Created con la solicitud guardada.
     @PostMapping
     @PreAuthorize("hasAnyAuthority('Cliente', 'Operador', 'Admin')")
     public ResponseEntity<RequestEntity> create(
             @Valid @RequestBody CreateRequestDto request,
             @AuthenticationPrincipal Jwt jwt) {
+        // Se pasa también el token crudo: el servicio lo reenvía al catálogo para validar el trámite.
         return new ResponseEntity<>(
                 service.createRequest(request, Requester.from(jwt), jwt.getTokenValue()), HttpStatus.CREATED);
     }
 
     // El Cliente ve solo las suyas; Admin, Operador y Auditor (solo lectura) ven todas
+    // GET /api/requests
     @GetMapping
     @PreAuthorize("hasAnyAuthority('Cliente', 'Operador', 'Admin', 'Auditor')")
     public ResponseEntity<List<RequestEntity>> getAll(@AuthenticationPrincipal Jwt jwt) {
         return ResponseEntity.ok(service.getAllRequests(Requester.from(jwt)));
     }
 
+    // GET /api/requests/{id}: el servicio verifica que un Cliente solo vea las suyas.
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('Cliente', 'Operador', 'Admin', 'Auditor')")
     public ResponseEntity<RequestEntity> getById(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
@@ -56,6 +66,7 @@ public class RequestController {
     }
 
     // Historial de cambios de estado: el personal ve todos; el Cliente solo el de sus solicitudes
+    // GET /api/requests/{id}/history
     @GetMapping("/{id}/history")
     @PreAuthorize("hasAnyAuthority('Cliente', 'Operador', 'Admin', 'Auditor')")
     public ResponseEntity<List<StatusChangeResponse>> getHistory(
@@ -65,6 +76,7 @@ public class RequestController {
 
     // Solo el Operador municipal y el Admin pueden cambiar estados. Al rechazar o cancelar en terreno el
     // motivo es obligatorio; al pasar a EN_TERRENO se exigen los datos de la cuadrilla.
+    // PUT /api/requests/{id}/status con {"status":"...", "reason":"...", "crew":{...}}
     @PutMapping("/{id}/status")
     @PreAuthorize("hasAnyAuthority('Operador', 'Admin')")
     public ResponseEntity<RequestEntity> updateStatus(
