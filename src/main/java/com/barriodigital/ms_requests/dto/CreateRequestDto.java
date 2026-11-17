@@ -14,8 +14,11 @@ import jakarta.validation.constraints.Size;
  *               es siempre el {@code oid} de su JWT.
  * @param citizenEmail correo del vecino. Obligatorio cuando quien crea es Operador o Admin (ingreso
  *               a nombre de un vecino); para un Cliente se ignora y se usa el correo de su JWT.
+ *
+ * <p>QUÉ ES: DTO de entrada con validaciones (Bean Validation, activadas por @Valid en el controlador).
  */
 public record CreateRequestDto(
+        // Id del tipo de trámite elegido (se valida contra el catálogo en el servicio).
         @NotNull(message = "Debes elegir un tipo de trámite")
         Long procedureId,
 
@@ -25,6 +28,7 @@ public record CreateRequestDto(
 
         String userId,
 
+        // El formato y dígito verificador del RUT se validan en el servicio; aquí solo el largo.
         @Size(max = 12, message = "El RUT admite hasta {max} caracteres")
         String citizenRut,
 

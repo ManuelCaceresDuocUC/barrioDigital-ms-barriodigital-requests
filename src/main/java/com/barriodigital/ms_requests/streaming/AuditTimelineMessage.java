@@ -1,6 +1,9 @@
 package com.barriodigital.ms_requests.streaming;
 
-/** Acción del personal sobre un trámite (tópico audit.timeline): quién, qué cambió y por qué. */
+/**
+ * Acción del personal sobre un trámite (tópico audit.timeline): quién, qué cambió y por qué.
+ * QUÉ ES: el JSON que se publica en Kafka para la auditoría; lo guarda tal cual el microservicio audit.
+ */
 public record AuditTimelineMessage(
         String eventId,
         String occurredAt,
@@ -14,6 +17,7 @@ public record AuditTimelineMessage(
         String actorRole,
         Crew crew) {
 
+    // Único valor de "action" por ahora (hay un solo tipo de acción auditada).
     public static final String STATUS_CHANGE = "STATUS_CHANGE";
 
     /** Cuadrilla asignada al pasar a EN_TERRENO. */

@@ -6,6 +6,9 @@ import jakarta.validation.constraints.Size;
  * Datos de la cuadrilla a la que se asigna la solicitud al pasar a EN_TERRENO. Texto libre: el nombre,
  * los integrantes y la patente son obligatorios (lo valida el servicio, porque solo se exigen en ese
  * cambio de estado); el tipo de vehículo y el teléfono son opcionales.
+ *
+ * <p>QUÉ ES: DTO anidado dentro de UpdateStatusRequest. Aquí solo se validan los largos máximos
+ * (coinciden con las columnas de la tabla de historial).
  */
 public record CrewAssignmentDto(
         @Size(max = 100, message = "El nombre de la cuadrilla no puede superar los 100 caracteres")

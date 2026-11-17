@@ -1,6 +1,9 @@
 package com.barriodigital.ms_requests.messaging;
 
-/** El mensaje no pudo entregarse (el servicio de mensajería no respondió o lo rechazó). */
+/**
+ * El mensaje no pudo entregarse (el servicio de mensajería no respondió o lo rechazó).
+ * QUÉ ES: excepción propia que oculta al resto del código el detalle técnico de por qué falló.
+ */
 public class MessagePublishException extends RuntimeException {
 
     public MessagePublishException(String message, Throwable cause) {

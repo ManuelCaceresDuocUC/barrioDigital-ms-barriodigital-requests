@@ -10,6 +10,9 @@ import org.springframework.security.oauth2.jwt.Jwt;
  *
  * @param userId identificador del usuario en Azure AD (claim {@code oid})
  * @param roles  roles del claim {@code roles} (Admin, Operador, Cliente, Auditor)
+ *
+ * <p>QUÉ ES: un "value object" que resume quién llama. El resto del código usa Requester en lugar de
+ * leer claims del token por todos lados, lo que concentra las reglas de rol en un solo lugar.
  */
 public record Requester(String userId, String email, String name, Set<String> roles) {
 
@@ -22,14 +25,18 @@ public record Requester(String userId, String email, String name, Set<String> ro
     /** Roles que pueden ingresar una solicitud a nombre de un vecino. */
     private static final Set<String> ON_BEHALF = Set.of("Admin", "Operador");
 
+    // Constructor compacto: copia los roles a un conjunto inmutable (y evita null).
     public Requester {
         roles = roles == null ? Set.of() : Set.copyOf(roles);
     }
 
+    // Fábrica: construye el Requester leyendo los claims del JWT.
     public static Requester from(Jwt jwt) {
+        // El correo puede venir en "email" o, si no, en "preferred_username" (cuenta de Microsoft).
         String email = firstNonBlank(jwt.getClaimAsString("email"), jwt.getClaimAsString("preferred_username"));
         List<String> roles = jwt.getClaimAsStringList("roles");
         return new Requester(
+                // "oid" = identificador único e inmutable del usuario en Azure AD.
                 jwt.getClaimAsString("oid"),
                 email,
                 jwt.getClaimAsString("name"),
@@ -51,9 +58,11 @@ public record Requester(String userId, String email, String name, Set<String> ro
      * como Cliente, igual que en el resto del sistema.
      */
     public String primaryRole() {
+        // Se recorre la lista por prioridad (Admin primero) y se elige el primero que el usuario tenga.
         return ROLE_PRIORITY.stream().filter(roles::contains).findFirst().orElse("Cliente");
     }
 
+    // Devuelve el primer texto que no sea null ni vacío.
     private static String firstNonBlank(String... values) {
         for (String value : values) {
             if (value != null && !value.isBlank()) {

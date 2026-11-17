@@ -14,15 +14,18 @@ import jakarta.validation.constraints.Size;
  * @param crew   datos de la cuadrilla: obligatorios al pasar a EN_TERRENO; ignorados en los demás cambios
  */
 public record UpdateStatusRequest(
+        // El enum RequestStatus rechaza valores desconocidos (ver GlobalExceptionHandler).
         @NotNull(message = "El estado es obligatorio")
         RequestStatus status,
 
         @Size(max = 500, message = "El motivo no puede superar los 500 caracteres")
         String reason,
 
+        // @Valid: valida también los campos internos del objeto cuadrilla.
         @Valid
         CrewAssignmentDto crew) {
 
+    // Constructor corto sin cuadrilla (cómodo en tests y en cambios que no la necesitan).
     public UpdateStatusRequest(RequestStatus status, String reason) {
         this(status, reason, null);
     }
