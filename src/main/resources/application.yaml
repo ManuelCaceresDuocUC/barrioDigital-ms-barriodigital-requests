@@ -1,11 +1,13 @@
+# Configuración del microservicio de solicitudes (ms-requests).
 server:
-  port: 8082 # Usamos 8081 para no chocar con el BFF u otros MS
+  port: 8082 # Usamos 8081 para no chocar con el BFF u otros MS (en el compose se sobrescribe con SERVER_PORT=8081)
   error:
     include-message: always # El frontend muestra el mensaje de los errores (409 sin cupo, 400, etc.)
 
 spring:
   application:
     name: ms-requests
+  # Conexión a Oracle: usuario y clave llegan por variables de entorno (DB_USER, DB_PASSWORD).
   datasource:
     url: jdbc:oracle:thin:@//localhost:1521/XEPDB1
     username: ${DB_USER}
@@ -14,7 +16,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update # Solo para desarrollo, crea las tablas automáticamente
-    show-sql: true
+    show-sql: true     # Muestra el SQL en el log (útil para estudiar qué hace JPA).
     properties:
       hibernate:
         format_sql: true
@@ -25,22 +27,23 @@ spring:
       resourceserver:
         jwt:
           # Reemplaza <TU-TENANT-ID> con el ID de tu directorio en Azure
+          # Emisor de los tokens (Microsoft Entra ID): de aquí se obtienen las claves públicas para validar el JWT.
           issuer-uri: https://login.microsoftonline.com/ffcb40ec-aa43-4c4e-acd8-4d27467872c5/v2.0
 
   # Cliente hacia ms-barriodigital-catalog. En Docker llega por la variable CATALOG_SERVICE_URL.
 catalog:
     url: ${CATALOG_SERVICE_URL:http://localhost:8081}
-    connect-timeout: 3s
-    read-timeout: 10s
+    connect-timeout: 3s   # Tiempo máximo para conectar con el catálogo.
+    read-timeout: 10s     # Tiempo máximo esperando su respuesta.
 
   # Routing keys de los eventos que se publican. requests no se conecta a RabbitMQ: pide la publicación a
   # ms-barriodigital-rabbitadmin, que define el exchange y valida estas claves.
 barriodigital:
     messaging:
       routing-keys:
-        email: email.send
-        crew: crew.ticket
-        certificate: certificate.gen
+        email: email.send              # -> cola q.cmd.email
+        crew: crew.ticket              # -> cola q.cmd.crew
+        certificate: certificate.gen   # -> cola q.cmd.certificate
     rabbitadmin:
       url: ${RABBITADMIN_SERVICE_URL:http://localhost:8086}
       connect-timeout: 2s
